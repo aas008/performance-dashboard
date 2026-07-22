@@ -10692,6 +10692,13 @@ def render_filtered_data_section(filtered_df, use_expander=True):
             },
         }
 
+        SGLANG_GRAFANA_DASHBOARDS = {
+            "H200_NEW": {
+                "dashboard_id": "sglang-dcgm-metrics-psap-rhaiis-h200",
+                "dashboard_name": "sglang-dcgm-metrics-psap-rhaiis-h200",
+            },
+        }
+
         # Jan 1, 2026 00:00:00 UTC in milliseconds
         H200_DASHBOARD_CUTOFF_MS = 1767225600000
 
@@ -10716,6 +10723,7 @@ def render_filtered_data_section(filtered_df, use_expander=True):
             uuid = row.get("uuid")
             accelerator = row.get("accelerator", "")
             run_name = row.get("run", "")
+            version = row.get("version", "")
 
             # Only create link if all required fields are present and not NaN
             if (
@@ -10745,7 +10753,15 @@ def render_filtered_data_section(filtered_df, use_expander=True):
                 else:
                     return None
 
-                dashboard_config = GRAFANA_DASHBOARDS[dashboard_key]
+                is_sglang = isinstance(version, str) and version.lower().startswith("sglang")
+                if is_sglang:
+                    if dashboard_key in SGLANG_GRAFANA_DASHBOARDS:
+                        dashboard_config = SGLANG_GRAFANA_DASHBOARDS[dashboard_key]
+                    else:
+                        return None
+                else:
+                    dashboard_config = GRAFANA_DASHBOARDS[dashboard_key]
+
                 dashboard_id = dashboard_config["dashboard_id"]
                 dashboard_name = dashboard_config["dashboard_name"]
                 extra_params = dashboard_config.get("extra_params", "")
