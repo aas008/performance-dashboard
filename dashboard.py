@@ -10699,7 +10699,6 @@ def render_filtered_data_section(filtered_df, use_expander=True):
         SGLANG_GRAFANA_DASHBOARDS = {
             "H200_OLD": _SGLANG_H200_DASHBOARD,
             "H200_NEW": _SGLANG_H200_DASHBOARD,
-            "H200_HERA": _SGLANG_H200_DASHBOARD,
             "H200_HERA2": _SGLANG_H200_DASHBOARD,
         }
 
