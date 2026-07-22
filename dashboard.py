@@ -10657,11 +10657,15 @@ def render_filtered_data_section(filtered_df, use_expander=True):
             },
         }
 
+        _SGLANG_H200_DASHBOARD = {
+            "dashboard_id": "sglang-dcgm-metrics-psap-rhaiis-h200",
+            "dashboard_name": "sglang-dcgm-metrics-psap-rhaiis-h200",
+        }
         SGLANG_GRAFANA_DASHBOARDS = {
-            "H200_NEW": {
-                "dashboard_id": "sglang-dcgm-metrics-psap-rhaiis-h200",
-                "dashboard_name": "sglang-dcgm-metrics-psap-rhaiis-h200",
-            },
+            "H200_OLD": _SGLANG_H200_DASHBOARD,
+            "H200_NEW": _SGLANG_H200_DASHBOARD,
+            "H200_HERA": _SGLANG_H200_DASHBOARD,
+            "H200_HERA2": _SGLANG_H200_DASHBOARD,
         }
 
         # Jan 1, 2026 00:00:00 UTC in milliseconds
