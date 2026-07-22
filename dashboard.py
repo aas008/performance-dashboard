@@ -10697,8 +10697,7 @@ def render_filtered_data_section(filtered_df, use_expander=True):
             "dashboard_name": "sglang-dcgm-metrics-psap-rhaiis-h200",
         }
         SGLANG_GRAFANA_DASHBOARDS = {
-            "H200_OLD": _SGLANG_H200_DASHBOARD,
-            "H200_NEW": _SGLANG_H200_DASHBOARD,
+            "H200": _SGLANG_H200_DASHBOARD,
             "H200_HERA2": _SGLANG_H200_DASHBOARD,
         }
 
@@ -10758,8 +10757,11 @@ def render_filtered_data_section(filtered_df, use_expander=True):
 
                 is_sglang = isinstance(version, str) and version.lower().startswith("sglang")
                 if is_sglang:
-                    if dashboard_key in SGLANG_GRAFANA_DASHBOARDS:
-                        dashboard_config = SGLANG_GRAFANA_DASHBOARDS[dashboard_key]
+                    sglang_key = dashboard_key
+                    if sglang_key not in SGLANG_GRAFANA_DASHBOARDS and sglang_key.startswith("H200"):
+                        sglang_key = "H200"
+                    if sglang_key in SGLANG_GRAFANA_DASHBOARDS:
+                        dashboard_config = SGLANG_GRAFANA_DASHBOARDS[sglang_key]
                     else:
                         return None
                 else:
