@@ -10755,10 +10755,15 @@ def render_filtered_data_section(filtered_df, use_expander=True):
                 else:
                     return None
 
-                is_sglang = isinstance(version, str) and version.lower().startswith("sglang")
+                is_sglang = isinstance(version, str) and version.lower().startswith(
+                    "sglang"
+                )
                 if is_sglang:
                     sglang_key = dashboard_key
-                    if sglang_key not in SGLANG_GRAFANA_DASHBOARDS and sglang_key.startswith("H200"):
+                    if (
+                        sglang_key not in SGLANG_GRAFANA_DASHBOARDS
+                        and sglang_key.startswith("H200")
+                    ):
                         sglang_key = "H200"
                     if sglang_key in SGLANG_GRAFANA_DASHBOARDS:
                         dashboard_config = SGLANG_GRAFANA_DASHBOARDS[sglang_key]
