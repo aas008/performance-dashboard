@@ -461,12 +461,14 @@ def assign_profile_vectorized(df):
         (prompt == 512) & (output == 2048),
         (prompt == 2048) & (output == 128),
         (prompt == 8000) & (output == 1000),
+        (prompt == 100000) & (output == 1000),
     ]
     choices = [
         "Profile A: Balanced (1k/1k)",
         "Profile B: Variable Workload (512/2k)",
         "Profile C: Large Prompt (2k/128)",
         "Profile D: Prefill Heavy (8k/1k)",
+        "Profile E: Long Context (100k/1k)",
     ]
     return np.select(conditions, choices, default="Custom ISL/OSL")
 
