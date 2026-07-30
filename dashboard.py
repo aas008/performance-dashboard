@@ -10694,7 +10694,8 @@ def render_filtered_data_section(filtered_df, use_expander=True):
 
         _SGLANG_H200_DASHBOARD = {
             "dashboard_id": "sglang-dcgm-metrics-psap-rhaiis-h200",
-            "dashboard_name": "sglang-dcgm-metrics-psap-rhaiis-h200",
+            "dashboard_name": "sglang-2b-dcgm-metrics-psap-rhaiis-h200",
+            "extra_params": "&var-cluster_name=$__all&var-model_name=$__all",
         }
         SGLANG_GRAFANA_DASHBOARDS = {
             "H200": _SGLANG_H200_DASHBOARD,
