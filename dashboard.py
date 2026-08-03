@@ -6806,6 +6806,15 @@ def render_compare_versions_summary_section(df, use_expander=True):
                 column_config=column_config,
             )
 
+            csv_data = summary_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 Download Table as CSV",
+                data=csv_data,
+                file_name=f"compare_{version_1}_vs_{version_2}_{selected_accelerator}_{profile_short}.csv",
+                mime="text/csv",
+                key="compare_versions_csv_download",
+            )
+
             # Legend
             st.markdown("---")
             st.markdown(
@@ -11036,6 +11045,15 @@ def render_filtered_data_section(filtered_df, use_expander=True):
             column_config=column_config,
             disabled=disabled_cols,
             key="filtered_data_table",
+        )
+
+        csv_data = display_filtered_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="📥 Download Filtered Data as CSV",
+            data=csv_data,
+            file_name="filtered_data.csv",
+            mime="text/csv",
+            key="filtered_data_csv_download",
         )
 
         checked = edited_df[edited_df["view_logs_link"]]
