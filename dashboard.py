@@ -6870,10 +6870,17 @@ def render_compare_versions_summary_section(df, use_expander=True):
             )
 
             csv_data = summary_df.to_csv(index=False).encode("utf-8")
+            _raw = f"compare_{version_1}_vs_{version_2}_{selected_accelerator}_{profile_short}"
+            safe_name = (
+                _raw.replace("/", "-")
+                .replace(" ", "_")
+                .replace("(", "")
+                .replace(")", "")
+            )
             st.download_button(
                 label="📥 Download Table as CSV",
                 data=csv_data,
-                file_name=f"compare_{version_1}_vs_{version_2}_{selected_accelerator}_{profile_short}.csv",
+                file_name=f"{safe_name}.csv",
                 mime="text/csv",
                 key="compare_versions_csv_download",
             )
@@ -7060,8 +7067,16 @@ def render_compare_versions_summary_section(df, use_expander=True):
                             if row["Metric"]
                             != "Total Throughput (input + output tok/s)"
                         ]
-                        v1_ttft_median_s = v1_ttft_median / 1000 if pd.notna(v1_ttft_median) else v1_ttft_median
-                        v2_ttft_median_s = v2_ttft_median / 1000 if pd.notna(v2_ttft_median) else v2_ttft_median
+                        v1_ttft_median_s = (
+                            v1_ttft_median / 1000
+                            if pd.notna(v1_ttft_median)
+                            else v1_ttft_median
+                        )
+                        v2_ttft_median_s = (
+                            v2_ttft_median / 1000
+                            if pd.notna(v2_ttft_median)
+                            else v2_ttft_median
+                        )
                         detail_rows.append(
                             {
                                 "Metric": f"TTFT Median{latency_conc_label}",
