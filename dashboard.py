@@ -102,6 +102,18 @@ OVERVIEW_ADDITIONAL: list[str] = []
 OVERVIEW_RELEASE_PAIRS = [
     # ── RHAIIS 3.5 release pairs ────────────────────────────────────
     {
+        "current": "RHAIIS-3.5-GA",
+        "previous": "RHAIIS-3.4-GA",
+        "upstream": "vLLM-0.24.0",
+        "additional": [],
+    },
+    {
+        "current": "RHAIIS-3.5-GA",
+        "previous": "RHAIIS-3.5-EA2",
+        "upstream": "vLLM-0.24.0",
+        "additional": [],
+    },
+    {
         "current": "RHAIIS-3.5-EA2",
         "previous": "RHAIIS-3.5-EA1",
         "upstream": "vLLM-0.21.0",
@@ -7051,8 +7063,16 @@ def render_compare_versions_summary_section(df, use_expander=True):
                             if row["Metric"]
                             != "Total Throughput (input + output tok/s)"
                         ]
-                        v1_ttft_median_s = v1_ttft_median / 1000 if pd.notna(v1_ttft_median) else v1_ttft_median
-                        v2_ttft_median_s = v2_ttft_median / 1000 if pd.notna(v2_ttft_median) else v2_ttft_median
+                        v1_ttft_median_s = (
+                            v1_ttft_median / 1000
+                            if pd.notna(v1_ttft_median)
+                            else v1_ttft_median
+                        )
+                        v2_ttft_median_s = (
+                            v2_ttft_median / 1000
+                            if pd.notna(v2_ttft_median)
+                            else v2_ttft_median
+                        )
                         detail_rows.append(
                             {
                                 "Metric": f"TTFT Median{latency_conc_label}",
