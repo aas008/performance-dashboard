@@ -10800,6 +10800,10 @@ def render_filtered_data_section(filtered_df, use_expander=True):
                 "dashboard_id": "psap-b200-mlperf",
                 "dashboard_name": "vllm-2b-dcgm-metrics-psap-b200-mlperf",
             },
+            "B200_PIRATE": {
+                "dashboard_id": "b200-pirate-vllm-dcgm",
+                "dashboard_name": "vllm-2b-dcgm-metrics-b200-pirate",
+            },
         }
 
         _SGLANG_H200_DASHBOARD = {
