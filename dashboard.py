@@ -10844,6 +10844,13 @@ def render_filtered_data_section(filtered_df, use_expander=True):
             upper = run_name.upper()
             return upper.startswith("H200-HERA2-") or upper.startswith("H200_HERA2-")
 
+        def _is_zeus2_run(run_name):
+            """Check if a run belongs to the H200 ZEUS2 cluster."""
+            if not isinstance(run_name, str):
+                return False
+            upper = run_name.upper()
+            return upper.startswith("H200-ZEUS2-") or upper.startswith("H200_ZEUS2-")
+
         def create_grafana_link(row):
             """Create Grafana dashboard link if timestamps are available."""
             start_time = row.get("guidellm_start_time_ms")
@@ -10871,6 +10878,8 @@ def render_filtered_data_section(filtered_df, use_expander=True):
                     dashboard_key = "H200_HERA2"
                 elif _is_hera_run(run_name):
                     dashboard_key = "H200_HERA"
+                elif _is_zeus2_run(run_name):
+                    dashboard_key = "H200_ZEUS2"
                 elif accelerator == "H200":
                     if start_ms >= H200_DASHBOARD_CUTOFF_MS:
                         dashboard_key = "H200_NEW"
