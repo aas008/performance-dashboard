@@ -834,23 +834,27 @@ def render_compare_versions_section(df: pd.DataFrame):
 
     # Get comparison metrics (higher is better for throughput, lower for latency)
     # Format: (column_name, display_label, higher_is_better)
-    comparison_metrics = [
+    # Filter based on selected aggregation method
+    agg_suffix = "_median" if selected_aggregation == "Median" else "_mean"
+
+    all_metrics = [
         ("audio_throughput", "Audio Throughput", True),
         ("request_throughput", "Request Throughput", True),
         ("audio_rtf_mean", "Audio RTF (mean)", False),
         ("audio_rtf_median", "Audio RTF (median)", False),
-        ("audio_rtf_p99", "Audio RTF (P99)", False),
         ("audio_ttfp_mean", "Audio TTFP (mean)", False),
         ("audio_ttfp_median", "Audio TTFP (median)", False),
-        ("audio_ttfp_p99", "Audio TTFP (P99)", False),
         ("e2el_mean", "E2E Latency (mean)", False),
         ("e2el_median", "E2E Latency (median)", False),
-        ("e2el_p99", "E2E Latency (P99)", False),
         ("audio_underrun_mean", "Audio Underrun (mean)", False),
         ("audio_underrun_median", "Audio Underrun (median)", False),
-        ("audio_underrun_p99", "Audio Underrun (P99)", False),
     ]
-    comparison_metrics = [(m, l, h) for m, l, h in comparison_metrics if m in df.columns]
+
+    # Filter metrics: keep throughputs + metrics matching the selected aggregation suffix
+    comparison_metrics = [
+        (m, l, h) for m, l, h in all_metrics
+        if m in df.columns and (m.startswith("audio_throughput") or m.startswith("request_throughput") or agg_suffix in m)
+    ]
 
     if not comparison_metrics:
         st.warning("No metrics available for comparison.")
