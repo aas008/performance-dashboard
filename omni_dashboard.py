@@ -1269,20 +1269,59 @@ OMNI_SECTIONS_WITHOUT_GLOBAL_FILTERS = {
 
 
 def render_omni_dashboard(csv_path: str):
-    """Render the vLLM-Omni TTS benchmark dashboard.
+    """Render the vLLM-Omni multimodal benchmark dashboard.
 
-    Follows the same layout as the RHAIIS dashboard:
-    - Global filters across the top (cascading)
-    - Sidebar section navigation with grouped sections
+    Simplified structure matching CPU dashboard:
+    - Global filters
+    - Sidebar section navigation (grouped)
     - Per-section content rendering
     """
     df = load_omni_data(csv_path)
 
     if df is None or df.empty:
-        st.error("No Omni TTS data available. Please check the data file.")
+        st.error("No Omni data available. Please check the data file.")
         return
 
-    # Section navigation from URL
+    # Simplified section list (matching CPU dashboard pattern)
+    section_list = [
+        "📊 Overview",
+        "📈 Performance Plots",
+        "⚖️ Compare Versions",
+        "⚙️ Runtime Configs",
+        "📄 Filtered Data",
+    ]
+
+    SECTION_GROUPS = [
+        (
+            "Dashboard",
+            ["📊 Overview"],
+        ),
+        (
+            "Performance Analysis",
+            [
+                "📈 Performance Plots",
+                "⚖️ Compare Versions",
+            ],
+        ),
+        (
+            "Tools",
+            [
+                "⚙️ Runtime Configs",
+                "📄 Filtered Data",
+            ],
+        ),
+    ]
+
+    OMNI_SECTION_SLUG_MAP = {
+        "📊 Overview": "overview",
+        "📈 Performance Plots": "performance_plots",
+        "⚖️ Compare Versions": "compare_versions",
+        "⚙️ Runtime Configs": "runtime_configs",
+        "📄 Filtered Data": "filtered_data",
+    }
+    OMNI_SLUG_TO_SECTION = {v: k for k, v in OMNI_SECTION_SLUG_MAP.items()}
+
+    # Restore section from URL on first load
     if "omni_url_loaded" not in st.session_state:
         st.session_state.omni_url_loaded = True
         if "section" in st.query_params:
@@ -1290,15 +1329,15 @@ def render_omni_dashboard(csv_path: str):
             if slug in OMNI_SLUG_TO_SECTION:
                 st.session_state.omni_active_section = OMNI_SLUG_TO_SECTION[slug]
 
-    current_section = st.session_state.get("omni_active_section", OMNI_SECTION_LIST[0])
-    if current_section not in OMNI_SECTION_LIST:
-        current_section = OMNI_SECTION_LIST[0]
+    current_section = st.session_state.get("omni_active_section", section_list[0])
+    if current_section not in section_list:
+        current_section = section_list[0]
     st.session_state.omni_active_section = current_section
 
-    # Sidebar navigation (grouped, matching RHAIIS)
+    # Sidebar navigation
     with st.sidebar:
-        for group_name, group_sections in OMNI_SECTION_GROUPS:
-            visible = [s for s in group_sections if s in OMNI_SECTION_LIST]
+        for group_name, group_sections in SECTION_GROUPS:
+            visible = [s for s in group_sections if s in section_list]
             if not visible:
                 continue
             st.markdown(
@@ -1315,10 +1354,13 @@ def render_omni_dashboard(csv_path: str):
                     type=btn_type,
                 ):
                     st.session_state.omni_active_section = section_name
-                    st.query_params["section"] = OMNI_SECTION_TO_SLUG[section_name]
+                    st.query_params["section"] = OMNI_SECTION_SLUG_MAP[section_name]
                     st.rerun()
 
     # Global filters (top of main content, shown for most sections)
+    OMNI_SECTIONS_WITHOUT_GLOBAL_FILTERS = {
+        "⚖️ Compare Versions",
+    }
     show_global_filters = current_section not in OMNI_SECTIONS_WITHOUT_GLOBAL_FILTERS
 
     if show_global_filters:
@@ -1331,20 +1373,14 @@ def render_omni_dashboard(csv_path: str):
         st.warning("No data matches the selected filters.")
         return
 
-    # Render active section
-    if current_section == "Overview":
+    # Render active section (simplified to match CPU dashboard)
+    if current_section == "📊 Overview":
         render_overview_section(filtered_df)
-    elif current_section == "Performance Plots":
+    elif current_section == "📈 Performance Plots":
         render_performance_plots_section(filtered_df)
-    elif current_section == "Model Performance Comparison":
-        render_model_comparison_section(filtered_df)
-    elif current_section == "Compare Versions":
+    elif current_section == "⚖️ Compare Versions":
         render_compare_versions_section(df)
-    elif current_section == "Runtime Server Configs":
+    elif current_section == "⚙️ Runtime Configs":
         render_runtime_configs_section(filtered_df)
-    elif current_section == "View vLLM Results":
-        render_view_logs_section(filtered_df)
-    elif current_section == "View Startup Logs":
-        render_startup_logs_section(filtered_df)
-    elif current_section == "Filtered Data":
+    elif current_section == "📄 Filtered Data":
         render_filtered_data_section(filtered_df)
