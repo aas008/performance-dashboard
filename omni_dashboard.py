@@ -737,7 +737,7 @@ def render_compare_versions_section(df: pd.DataFrame):
         )
         return
 
-    # Create 4-column selector layout (matching CPU dashboard)
+    # Create selector layout
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
@@ -775,6 +775,20 @@ def render_compare_versions_section(df: pd.DataFrame):
             key="omni_cv_workload",
         )
 
+    # Add concurrency selector row
+    if "concurrency" in df.columns:
+        all_concurrencies = sorted(df["concurrency"].unique().tolist())
+        col_conc, col_spacer = st.columns([1, 3])
+        with col_conc:
+            selected_concurrency = st.selectbox(
+                "Concurrency",
+                options=["Mean Across All"] + [str(int(c)) for c in all_concurrencies],
+                index=0,
+                key="omni_cv_concurrency",
+            )
+    else:
+        selected_concurrency = "Mean Across All"
+
     # Filter data based on selections
     base_df = df[df["version"] == base_version].copy()
     comp_df = df[df["version"] == compare_version].copy()
@@ -787,44 +801,81 @@ def render_compare_versions_section(df: pd.DataFrame):
         base_df = base_df[base_df.get("task_type", "") == selected_workload]
         comp_df = comp_df[comp_df.get("task_type", "") == selected_workload]
 
-    # Merge on model + task_type + accelerator + concurrency
-    merge_keys = [k for k in ["model", "task_type", "accelerator", "concurrency"] if k in df.columns]
+    if selected_concurrency != "Mean Across All":
+        conc_val = int(selected_concurrency)
+        base_df = base_df[base_df["concurrency"] == conc_val]
+        comp_df = comp_df[comp_df["concurrency"] == conc_val]
+
+    # Get comparison metrics (higher is better for throughput, lower for latency)
     comparison_metrics = [
-        "audio_throughput", "audio_rtf_mean", "audio_ttfp_mean",
-        "e2el_mean", "audio_underrun_mean", "request_throughput",
+        ("audio_throughput", "Audio Throughput", True),
+        ("audio_rtf_mean", "Audio RTF (mean)", False),
+        ("audio_ttfp_mean", "Audio TTFP (mean)", False),
+        ("e2el_mean", "E2E Latency (mean)", False),
+        ("request_throughput", "Request Throughput", True),
     ]
-    comparison_metrics = [m for m in comparison_metrics if m in df.columns]
+    comparison_metrics = [(m, l, h) for m, l, h in comparison_metrics if m in df.columns]
 
-    if not merge_keys or not comparison_metrics:
-        st.warning("Insufficient data columns for comparison.")
+    if not comparison_metrics:
+        st.warning("No metrics available for comparison.")
         return
 
-    merged = base_df[merge_keys + comparison_metrics].merge(
-        comp_df[merge_keys + comparison_metrics],
-        on=merge_keys,
-        suffixes=("_base", "_compare"),
-        how="inner"
-    )
+    # Group by model and calculate mean metrics
+    merge_keys = ["model"]
+    if selected_model == "All Models" and "model" in base_df.columns:
+        results = []
+        common_models = sorted(set(base_df["model"].unique()) & set(comp_df["model"].unique()))
 
-    if merged.empty:
-        st.warning("No overlapping configurations between the selected versions.")
-        return
+        for model in common_models:
+            model_base = base_df[base_df["model"] == model]
+            model_comp = comp_df[comp_df["model"] == model]
 
-    # Display comparison header
-    st.markdown(f"**Comparison:** {base_version} vs {compare_version} on {selected_model if selected_model != 'All Models' else 'all models'} with {selected_workload if selected_workload != 'All Workloads' else 'all workloads'}")
+            model_short = model.split("/")[-1] if "/" in model else model
+            row = {"Model": model_short}
 
-    # Calculate deltas with color coding
-    for metric in comparison_metrics:
-        base_col = f"{metric}_base"
-        comp_col = f"{metric}_compare"
-        if base_col in merged.columns and comp_col in merged.columns:
-            merged[f"{metric}_delta_%"] = (
-                (merged[comp_col] - merged[base_col])
-                / merged[base_col].abs()
-                * 100
-            ).round(1)
+            for metric_col, metric_label, higher_is_better in comparison_metrics:
+                if metric_col not in model_base.columns or metric_col not in model_comp.columns:
+                    row[metric_label] = "N/A"
+                    continue
 
-    st.dataframe(merged, use_container_width=True, hide_index=True)
+                base_mean = model_base[metric_col].mean()
+                comp_mean = model_comp[metric_col].mean()
+
+                if pd.isna(base_mean) or pd.isna(comp_mean) or base_mean == 0:
+                    row[metric_label] = "N/A"
+                    continue
+
+                pct_diff = ((comp_mean - base_mean) / base_mean) * 100
+                is_better_v2 = (pct_diff > 0) if higher_is_better else (pct_diff < 0)
+                is_similar = abs(pct_diff) < 5
+
+                if is_similar:
+                    row[metric_label] = f"🟡 ±{abs(pct_diff):.1f}%"
+                elif is_better_v2:
+                    row[metric_label] = f"🟢 +{abs(pct_diff):.1f}%"
+                else:
+                    row[metric_label] = f"🔴 -{abs(pct_diff):.1f}%"
+
+            results.append(row)
+
+        if results:
+            st.markdown(
+                f"**Comparison:** {base_version} vs {compare_version} | "
+                f"Model: {selected_model if selected_model != 'All Models' else 'All'} | "
+                f"Workload: {selected_workload if selected_workload != 'All Workloads' else 'All'} | "
+                f"Concurrency: {selected_concurrency}"
+            )
+            results_df = pd.DataFrame(results)
+            st.dataframe(results_df, use_container_width=True, hide_index=True)
+            st.caption(
+                f"🟢 {compare_version} performs better | "
+                f"🔴 {base_version} performs better | "
+                f"🟡 Similar Performance (< 5% difference)"
+            )
+        else:
+            st.warning("No data available for comparison.")
+    else:
+        st.warning("Select a specific model or improve data filtering.")
 
 
 def render_runtime_configs_section(filtered_df: pd.DataFrame):
