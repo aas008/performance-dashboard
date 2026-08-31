@@ -921,6 +921,96 @@ def render_compare_versions_section(df: pd.DataFrame):
                 f"🔴 {base_version} performs better | "
                 f"🟡 Similar Performance (< 5% difference)"
             )
+
+            # Detailed Model Comparisons
+            st.markdown("### 📋 Detailed Model Comparisons")
+            st.markdown("*Click on a model to see detailed metrics comparison*")
+
+            for idx, model in enumerate(common_models, 1):
+                model_base = base_df[base_df["model"] == model]
+                model_comp = comp_df[comp_df["model"] == model]
+
+                model_short = model.split("/")[-1] if "/" in model else model
+
+                with st.expander(f"{idx}. {model_short}"):
+                    detail_rows = []
+
+                    # Throughput metrics
+                    for metric_col, metric_label in [("audio_throughput", "Audio Throughput"), ("request_throughput", "Request Throughput")]:
+                        if metric_col not in model_base.columns or metric_col not in model_comp.columns:
+                            continue
+
+                        base_val = model_base[metric_col].mean()
+                        comp_val = model_comp[metric_col].mean()
+
+                        if pd.isna(base_val) or pd.isna(comp_val):
+                            continue
+
+                        pct_diff = ((comp_val - base_val) / base_val) * 100
+                        is_better_v2 = pct_diff > 0
+                        is_similar = abs(pct_diff) < 5
+
+                        if is_similar:
+                            winner = f"🟡 Similar (~{abs(pct_diff):.1f}% difference)"
+                        elif is_better_v2:
+                            winner = f"🟢 {compare_version} has +{abs(pct_diff):.1f}% higher {metric_label}"
+                        else:
+                            winner = f"🔴 {base_version} has +{abs(pct_diff):.1f}% higher {metric_label}"
+
+                        detail_rows.append({
+                            "Metric": metric_label,
+                            base_version: f"{base_val:.2f}",
+                            compare_version: f"{comp_val:.2f}",
+                            "Difference/Winner": winner,
+                        })
+
+                    # Latency metrics (mean/median based on aggregation)
+                    agg_func = "median" if selected_aggregation == "Median" else "mean"
+                    latency_suffix = "_median" if selected_aggregation == "Median" else "_mean"
+
+                    for metric_col, metric_label in [
+                        ("audio_ttfp" + latency_suffix, f"Audio TTFP ({selected_aggregation.lower()})"),
+                        ("audio_rtf" + latency_suffix, f"Audio RTF ({selected_aggregation.lower()})"),
+                        ("e2el" + latency_suffix, f"E2E Latency ({selected_aggregation.lower()})"),
+                        ("audio_underrun" + latency_suffix, f"Audio Underrun ({selected_aggregation.lower()})"),
+                    ]:
+                        if metric_col not in model_base.columns or metric_col not in model_comp.columns:
+                            continue
+
+                        if agg_func == "median":
+                            base_val = model_base[metric_col].median()
+                            comp_val = model_comp[metric_col].median()
+                        else:
+                            base_val = model_base[metric_col].mean()
+                            comp_val = model_comp[metric_col].mean()
+
+                        if pd.isna(base_val) or pd.isna(comp_val):
+                            continue
+
+                        pct_diff = ((comp_val - base_val) / base_val) * 100
+                        # For latency, lower is better
+                        is_better_v2 = pct_diff < 0
+                        is_similar = abs(pct_diff) < 5
+
+                        if is_similar:
+                            winner = f"🟡 Similar (~{abs(pct_diff):.1f}% difference)"
+                        elif is_better_v2:
+                            winner = f"🟢 {compare_version} has {abs(pct_diff):.1f}% lower {metric_label}"
+                        else:
+                            winner = f"🔴 {base_version} has {abs(pct_diff):.1f}% lower {metric_label}"
+
+                        detail_rows.append({
+                            "Metric": metric_label,
+                            base_version: f"{base_val:.3f}",
+                            compare_version: f"{comp_val:.3f}",
+                            "Difference/Winner": winner,
+                        })
+
+                    if detail_rows:
+                        detail_df = pd.DataFrame(detail_rows)
+                        st.dataframe(detail_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No detailed metrics available for this model.")
         else:
             st.warning("No data available for comparison.")
     else:
