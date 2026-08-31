@@ -737,8 +737,8 @@ def render_compare_versions_section(df: pd.DataFrame):
         )
         return
 
-    # Create selector layout
-    col1, col2, col3, col4 = st.columns(4)
+    # Create selector layout with swap button
+    col1, swap_col, col2, col3, col4 = st.columns([4, 0.4, 4, 4, 4], gap="small")
 
     with col1:
         base_version = st.selectbox(
@@ -746,6 +746,23 @@ def render_compare_versions_section(df: pd.DataFrame):
             options=all_versions,
             index=0,
             key="omni_cv_baseline",
+        )
+
+    def _swap_omni_versions():
+        """Swap Version 1 and Version 2 selections."""
+        v1 = st.session_state.get("omni_cv_baseline")
+        v2 = st.session_state.get("omni_cv_compare")
+        if v1 and v2:
+            st.session_state["omni_cv_baseline"] = v2
+            st.session_state["omni_cv_compare"] = v1
+
+    with swap_col:
+        st.markdown("<div style='height: 1.65rem'></div>", unsafe_allow_html=True)
+        st.button(
+            "⇄",
+            key="omni_swap_versions",
+            help="Swap versions",
+            on_click=_swap_omni_versions,
         )
 
     with col2:
