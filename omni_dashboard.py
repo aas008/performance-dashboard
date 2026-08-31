@@ -792,19 +792,27 @@ def render_compare_versions_section(df: pd.DataFrame):
             key="omni_cv_workload",
         )
 
-    # Add concurrency selector row
+    # Add concurrency and aggregation selectors
     if "concurrency" in df.columns:
         all_concurrencies = sorted(df["concurrency"].unique().tolist())
-        col_conc, col_spacer = st.columns([1, 3])
+        col_conc, col_agg, col_spacer = st.columns([1.5, 1.5, 1.5], gap="small")
         with col_conc:
             selected_concurrency = st.selectbox(
                 "Concurrency",
-                options=["Mean Across All"] + [str(int(c)) for c in all_concurrencies],
+                options=["All"] + [str(int(c)) for c in all_concurrencies],
                 index=0,
                 key="omni_cv_concurrency",
             )
+        with col_agg:
+            selected_aggregation = st.selectbox(
+                "Aggregation",
+                options=["Mean", "Median"],
+                index=0,
+                key="omni_cv_aggregation",
+            )
     else:
-        selected_concurrency = "Mean Across All"
+        selected_concurrency = "All"
+        selected_aggregation = "Mean"
 
     # Filter data based on selections
     base_df = df[df["version"] == base_version].copy()
@@ -818,7 +826,8 @@ def render_compare_versions_section(df: pd.DataFrame):
         base_df = base_df[base_df.get("task_type", "") == selected_workload]
         comp_df = comp_df[comp_df.get("task_type", "") == selected_workload]
 
-    if selected_concurrency != "Mean Across All":
+    # Filter by concurrency if not "All"
+    if selected_concurrency != "All":
         conc_val = int(selected_concurrency)
         base_df = base_df[base_df["concurrency"] == conc_val]
         comp_df = comp_df[comp_df["concurrency"] == conc_val]
@@ -853,6 +862,9 @@ def render_compare_versions_section(df: pd.DataFrame):
         results = []
         common_models = sorted(set(base_df["model"].unique()) & set(comp_df["model"].unique()))
 
+        # Determine aggregation function
+        agg_func = "median" if selected_aggregation == "Median" else "mean"
+
         for model in common_models:
             model_base = base_df[base_df["model"] == model]
             model_comp = comp_df[comp_df["model"] == model]
@@ -865,14 +877,19 @@ def render_compare_versions_section(df: pd.DataFrame):
                     row[metric_label] = "N/A"
                     continue
 
-                base_mean = model_base[metric_col].mean()
-                comp_mean = model_comp[metric_col].mean()
+                # Use selected aggregation method
+                if agg_func == "median":
+                    base_val = model_base[metric_col].median()
+                    comp_val = model_comp[metric_col].median()
+                else:  # mean
+                    base_val = model_base[metric_col].mean()
+                    comp_val = model_comp[metric_col].mean()
 
-                if pd.isna(base_mean) or pd.isna(comp_mean) or base_mean == 0:
+                if pd.isna(base_val) or pd.isna(comp_val) or base_val == 0:
                     row[metric_label] = "N/A"
                     continue
 
-                pct_diff = ((comp_mean - base_mean) / base_mean) * 100
+                pct_diff = ((comp_val - base_val) / base_val) * 100
                 is_better_v2 = (pct_diff > 0) if higher_is_better else (pct_diff < 0)
                 is_similar = abs(pct_diff) < 5
 
@@ -890,7 +907,8 @@ def render_compare_versions_section(df: pd.DataFrame):
                 f"**Comparison:** {base_version} vs {compare_version} | "
                 f"Model: {selected_model if selected_model != 'All Models' else 'All'} | "
                 f"Workload: {selected_workload if selected_workload != 'All Workloads' else 'All'} | "
-                f"Concurrency: {selected_concurrency}"
+                f"Concurrency: {selected_concurrency if selected_concurrency != 'All' else 'All'} | "
+                f"Aggregation: {selected_aggregation}"
             )
             results_df = pd.DataFrame(results)
             st.dataframe(results_df, use_container_width=True, hide_index=True)
