@@ -725,8 +725,9 @@ def render_model_comparison_section(filtered_df: pd.DataFrame):
 
 
 def render_compare_versions_section(df: pd.DataFrame):
-    """Compare Versions section — side-by-side comparison of two versions."""
+    """Compare Versions section — side-by-side comparison of two configurations."""
     st.subheader("Compare Versions")
+    st.markdown("💡 Compare performance between two vLLM Omni versions across all models and workloads.")
 
     all_versions = sorted(df["version"].unique().tolist())
     if len(all_versions) < 2:
@@ -734,68 +735,94 @@ def render_compare_versions_section(df: pd.DataFrame):
             "Version comparison requires at least 2 versions in the data. "
             f"Currently only **{all_versions[0] if all_versions else 'none'}** is available."
         )
-        # Still show a summary table for the single version
-        if all_versions:
-            st.markdown(f"#### Summary for {all_versions[0]}")
-            vdf = df[df["version"] == all_versions[0]]
-            summary_cols = [
-                "model", "task_type", "accelerator", "tp", "concurrency",
-                "audio_throughput", "audio_rtf_mean", "audio_ttfp_mean",
-                "e2el_mean", "audio_underrun_mean",
-                "successful_requests", "errored_requests",
-            ]
-            summary_cols = [c for c in summary_cols if c in vdf.columns]
-            st.dataframe(
-                vdf[summary_cols].sort_values(["model", "concurrency"]),
-                use_container_width=True,
-                hide_index=True,
-            )
         return
 
-    col1, col2 = st.columns(2)
+    # Create 4-column selector layout (matching CPU dashboard)
+    col1, col2, col3, col4 = st.columns(4)
+
     with col1:
         base_version = st.selectbox(
-            "Baseline Version",
+            "Version 1 (Baseline)",
             options=all_versions,
             index=0,
             key="omni_cv_baseline",
         )
+
     with col2:
         compare_options = [v for v in all_versions if v != base_version]
         compare_version = st.selectbox(
-            "Compare Version",
-            options=compare_options,
+            "Version 2 (Comparison)",
+            options=compare_options if compare_options else all_versions,
             index=0,
             key="omni_cv_compare",
         )
 
+    with col3:
+        all_models = sorted(df["model"].unique().tolist())
+        selected_model = st.selectbox(
+            "Model",
+            options=["All Models"] + all_models,
+            index=0,
+            key="omni_cv_model",
+        )
+
+    with col4:
+        all_workloads = sorted(df["task_type"].unique().tolist()) if "task_type" in df.columns else []
+        selected_workload = st.selectbox(
+            "Workload",
+            options=["All Workloads"] + all_workloads,
+            index=0,
+            key="omni_cv_workload",
+        )
+
+    # Filter data based on selections
     base_df = df[df["version"] == base_version].copy()
     comp_df = df[df["version"] == compare_version].copy()
 
-    # Merge on model + task_type + accelerator + tp + concurrency
-    merge_keys = ["model", "task_type", "accelerator", "tp", "concurrency"]
+    if selected_model != "All Models":
+        base_df = base_df[base_df["model"] == selected_model]
+        comp_df = comp_df[comp_df["model"] == selected_model]
+
+    if selected_workload != "All Workloads":
+        base_df = base_df[base_df.get("task_type", "") == selected_workload]
+        comp_df = comp_df[comp_df.get("task_type", "") == selected_workload]
+
+    # Merge on model + task_type + accelerator + concurrency
+    merge_keys = [k for k in ["model", "task_type", "accelerator", "concurrency"] if k in df.columns]
     comparison_metrics = [
         "audio_throughput", "audio_rtf_mean", "audio_ttfp_mean",
         "e2el_mean", "audio_underrun_mean", "request_throughput",
     ]
+    comparison_metrics = [m for m in comparison_metrics if m in df.columns]
+
+    if not merge_keys or not comparison_metrics:
+        st.warning("Insufficient data columns for comparison.")
+        return
 
     merged = base_df[merge_keys + comparison_metrics].merge(
         comp_df[merge_keys + comparison_metrics],
         on=merge_keys,
         suffixes=("_base", "_compare"),
+        how="inner"
     )
 
     if merged.empty:
         st.warning("No overlapping configurations between the selected versions.")
         return
 
-    # Calculate deltas
+    # Display comparison header
+    st.markdown(f"**Comparison:** {base_version} vs {compare_version} on {selected_model if selected_model != 'All Models' else 'all models'} with {selected_workload if selected_workload != 'All Workloads' else 'all workloads'}")
+
+    # Calculate deltas with color coding
     for metric in comparison_metrics:
-        merged[f"{metric}_delta"] = (
-            (merged[f"{metric}_compare"] - merged[f"{metric}_base"])
-            / merged[f"{metric}_base"]
-            * 100
-        )
+        base_col = f"{metric}_base"
+        comp_col = f"{metric}_compare"
+        if base_col in merged.columns and comp_col in merged.columns:
+            merged[f"{metric}_delta_%"] = (
+                (merged[comp_col] - merged[base_col])
+                / merged[base_col].abs()
+                * 100
+            ).round(1)
 
     st.dataframe(merged, use_container_width=True, hide_index=True)
 
