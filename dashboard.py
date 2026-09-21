@@ -11597,6 +11597,9 @@ def main():
     df["prefix_caching"] = df["prefix_caching"].fillna("").astype(str)
     df["prefix_caching"] = df["prefix_caching"].replace("", "no")
 
+    if "turn" in df.columns:
+        df = df[df["turn"].isna() | (df["turn"].astype(str).str.strip() == "")].copy()
+
     if "turns" not in df.columns:
         df["turns"] = 1
     df["turns"] = df["turns"].fillna(1).astype(int)
