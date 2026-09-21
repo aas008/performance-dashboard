@@ -937,7 +937,8 @@ def render_llmd_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                     if details.get("prefix_tokens"):
                         st.write(f"**Prefix tokens:** {details['prefix_tokens']}")
 
-                    st.write(f"_{details['description']}_")
+                    if details.get("description"):
+                        st.write(f"_{details['description']}_")
 
         st.caption(
             "Please refer to the notes column in the filtered data to understand more about the workload profile."

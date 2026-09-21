@@ -76,7 +76,15 @@ def get_profile_details(profile_name: str) -> dict:
             normalized.append(part)
 
     key = "/".join(normalized)
-    return PROFILE_DETAILS.get(key, {})
+    if key in PROFILE_DETAILS:
+        return PROFILE_DETAILS[key]
+
+    for base_key, base_details in PROFILE_DETAILS.items():
+        variants = _generate_display_variants(base_key)
+        if token_pair in variants or key in variants:
+            return base_details
+
+    return {}
 
 
 def inject_profile_tooltips() -> None:

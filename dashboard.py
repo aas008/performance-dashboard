@@ -4978,7 +4978,8 @@ def render_performance_trends_section(df: pd.DataFrame, use_expander=True) -> No
                         if details.get("prefix_tokens"):
                             st.write(f"**Prefix tokens:** {details['prefix_tokens']}")
 
-                        st.write(f"_{details['description']}_")
+                        if details.get("description"):
+                            st.write(f"_{details['description']}_")
 
         profile_df = model_df[model_df["profile"] == selected_profile].copy()
 
