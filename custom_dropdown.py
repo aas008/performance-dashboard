@@ -142,6 +142,8 @@ def inject_profile_tooltips() -> None:
 
         const tip = doc.createElement('div');
         tip.id = 'profile-tooltip';
+        tip.setAttribute('role', 'status');
+        tip.setAttribute('aria-live', 'polite');
         tip.style.cssText = `
             position: fixed; background: #ffffff; color: #1a1a1a;
             padding: 10px 14px; border-radius: 6px; font-size: 0.8rem;
@@ -177,8 +179,18 @@ def inject_profile_tooltips() -> None:
             opt.addEventListener('mouseleave', hide);
         }};
 
+        const checkActiveOption = () => {{
+            const active = doc.querySelector('[role="option"][aria-selected="true"]');
+            if (active) {{
+                const key = extractKey(active.textContent);
+                if (key) {{ show(active, key); return; }}
+            }}
+            hide();
+        }};
+
         new MutationObserver(() => {{
             doc.querySelectorAll('[role="option"]').forEach(bind);
+            checkActiveOption();
 
             // Tag ISL/OSL tooltip icons with profile-info-icon class
             doc.querySelectorAll('[data-testid="stWidgetLabel"]').forEach(label => {{
