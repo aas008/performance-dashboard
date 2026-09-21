@@ -4,7 +4,7 @@ import json
 
 import streamlit.components.v1 as components
 
-PROFILE_DETAILS = {
+PROFILE_DETAILS: dict[str, dict[str, str | list[str]]] = {
     "1000/1000": {
         "name": "Balanced Profile",
         "prompt_tokens": "1000",
@@ -51,7 +51,7 @@ PROFILE_DETAILS = {
 }
 
 
-def get_profile_details(profile_name: str) -> dict:
+def get_profile_details(profile_name: str) -> dict[str, str | list[str]]:
     """Get profile details by name, normalizing k-notation (e.g. 1k/1k -> 1000/1000)."""
     if profile_name in PROFILE_DETAILS:
         return PROFILE_DETAILS[profile_name]
@@ -94,9 +94,9 @@ def inject_profile_tooltips() -> None:
     Streamlit document via window.parent.document. A MutationObserver watches
     for [role="option"] elements and attaches tooltip behavior on hover.
     """
-    tooltip_map = {}
+    tooltip_map: dict[str, str] = {}
     for key, details in PROFILE_DETAILS.items():
-        lines = [details["name"]]
+        lines: list[str] = [str(details["name"])]
         lines.append(f"Input: {details['prompt_tokens']}")
         lines.append(f"Output: {details['output_tokens']}")
         if details.get("samples"):
@@ -108,7 +108,7 @@ def inject_profile_tooltips() -> None:
         if details.get("prefix_count"):
             lines.append(f"Prefix Count: {details['prefix_count']}")
         if details.get("description"):
-            lines.append(details["description"])
+            lines.append(str(details["description"]))
         tooltip_map[key] = "\n".join(lines)
 
     for key in list(tooltip_map):
@@ -204,7 +204,7 @@ def _generate_display_variants(token_pair: str) -> list[str]:
     Auto-generates k-notation variants (e.g. 1000/1000 -> 1k/1k, (1k/1k)).
     Additional aliases (e.g. 'Multi-turn') come from the 'aliases' field in PROFILE_DETAILS.
     """
-    variants = []
+    variants: list[str] = []
     parts = token_pair.split("/")
     if len(parts) != 2:
         return variants
