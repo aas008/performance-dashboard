@@ -1,10 +1,11 @@
 """Inject hover tooltips onto Streamlit selectbox options for profile dropdowns."""
 
 import json
+from typing import Any
 
 import streamlit.components.v1 as components
 
-PROFILE_DETAILS = {
+PROFILE_DETAILS: dict[str, dict[str, Any]] = {
     "1000/1000": {
         "name": "Balanced Profile",
         "prompt_tokens": "1000",
@@ -51,7 +52,7 @@ PROFILE_DETAILS = {
 }
 
 
-def get_profile_details(profile_name: str) -> dict:
+def get_profile_details(profile_name: str) -> dict[str, Any]:
     """Get profile details by name, normalizing k-notation (e.g. 1k/1k -> 1000/1000)."""
     if profile_name in PROFILE_DETAILS:
         return PROFILE_DETAILS[profile_name]
@@ -76,7 +77,15 @@ def get_profile_details(profile_name: str) -> dict:
             normalized.append(part)
 
     key = "/".join(normalized)
-    return PROFILE_DETAILS.get(key, {})
+    if key in PROFILE_DETAILS:
+        return PROFILE_DETAILS[key]
+
+    for base_key, base_details in PROFILE_DETAILS.items():
+        variants = _generate_display_variants(base_key)
+        if token_pair in variants or key in variants:
+            return base_details
+
+    return {}
 
 
 def inject_profile_tooltips() -> None:
@@ -86,9 +95,9 @@ def inject_profile_tooltips() -> None:
     Streamlit document via window.parent.document. A MutationObserver watches
     for [role="option"] elements and attaches tooltip behavior on hover.
     """
-    tooltip_map = {}
+    tooltip_map: dict[str, str] = {}
     for key, details in PROFILE_DETAILS.items():
-        lines = [details["name"]]
+        lines: list[str] = [str(details["name"])]
         lines.append(f"Input: {details['prompt_tokens']}")
         lines.append(f"Output: {details['output_tokens']}")
         if details.get("samples"):
@@ -100,7 +109,7 @@ def inject_profile_tooltips() -> None:
         if details.get("prefix_count"):
             lines.append(f"Prefix Count: {details['prefix_count']}")
         if details.get("description"):
-            lines.append(details["description"])
+            lines.append(str(details["description"]))
         tooltip_map[key] = "\n".join(lines)
 
     for key in list(tooltip_map):
@@ -133,6 +142,8 @@ def inject_profile_tooltips() -> None:
 
         const tip = doc.createElement('div');
         tip.id = 'profile-tooltip';
+        tip.setAttribute('role', 'status');
+        tip.setAttribute('aria-live', 'polite');
         tip.style.cssText = `
             position: fixed; background: #ffffff; color: #1a1a1a;
             padding: 10px 14px; border-radius: 6px; font-size: 0.8rem;
@@ -168,8 +179,18 @@ def inject_profile_tooltips() -> None:
             opt.addEventListener('mouseleave', hide);
         }};
 
+        const checkActiveOption = () => {{
+            const active = doc.querySelector('[role="option"][aria-selected="true"]');
+            if (active) {{
+                const key = extractKey(active.textContent);
+                if (key) {{ show(active, key); return; }}
+            }}
+            hide();
+        }};
+
         new MutationObserver(() => {{
             doc.querySelectorAll('[role="option"]').forEach(bind);
+            checkActiveOption();
 
             // Tag ISL/OSL tooltip icons with profile-info-icon class
             doc.querySelectorAll('[data-testid="stWidgetLabel"]').forEach(label => {{
@@ -196,7 +217,7 @@ def _generate_display_variants(token_pair: str) -> list[str]:
     Auto-generates k-notation variants (e.g. 1000/1000 -> 1k/1k, (1k/1k)).
     Additional aliases (e.g. 'Multi-turn') come from the 'aliases' field in PROFILE_DETAILS.
     """
-    variants = []
+    variants: list[str] = []
     parts = token_pair.split("/")
     if len(parts) != 2:
         return variants
