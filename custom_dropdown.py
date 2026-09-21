@@ -1,13 +1,10 @@
 """Inject hover tooltips onto Streamlit selectbox options for profile dropdowns."""
 
-from __future__ import annotations
-
 import json
-from typing import Any
 
 import streamlit.components.v1 as components
 
-PROFILE_DETAILS: dict[str, dict[str, Any]] = {
+PROFILE_DETAILS = {
     "1000/1000": {
         "name": "Balanced Profile",
         "prompt_tokens": "1000",
@@ -54,7 +51,7 @@ PROFILE_DETAILS: dict[str, dict[str, Any]] = {
 }
 
 
-def get_profile_details(profile_name: str) -> dict[str, Any]:
+def get_profile_details(profile_name: str) -> dict:
     """Get profile details by name, normalizing k-notation (e.g. 1k/1k -> 1000/1000)."""
     if profile_name in PROFILE_DETAILS:
         return PROFILE_DETAILS[profile_name]

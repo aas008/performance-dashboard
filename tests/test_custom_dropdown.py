@@ -2,7 +2,11 @@
 
 import pytest
 
-from custom_dropdown import PROFILE_DETAILS, _generate_display_variants, get_profile_details
+from custom_dropdown import (
+    PROFILE_DETAILS,
+    _generate_display_variants,
+    get_profile_details,
+)
 
 
 class TestGetProfileDetails:
