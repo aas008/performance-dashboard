@@ -3808,7 +3808,7 @@ def render_dataset_representation_section(selected_profile, use_expander=True):
 
 
 @st.fragment
-def render_performance_plots_section(filtered_df, use_expander=True):
+def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander=True):
     """📊 Performance Plots Section - Complete functionality from original."""
     if use_expander:
         if "performance_plots_expanded" not in st.session_state:
@@ -3871,12 +3871,30 @@ def render_performance_plots_section(filtered_df, use_expander=True):
             _sort_cols.append("DP")
         filtered_df_sorted = filtered_df.sort_values(_sort_cols).copy()
 
+        # Build per-turn plot df with run_identifier
+        per_turn_plot_df = pd.DataFrame()
+        if per_turn_df is not None and not per_turn_df.empty:
+            per_turn_plot_df = per_turn_df.copy()
+            per_turn_plot_df["run_identifier"] = (
+                per_turn_plot_df["accelerator"]
+                + " | "
+                + per_turn_plot_df["model"]
+                + " | "
+                + per_turn_plot_df["version"]
+                + " | TP="
+                + per_turn_plot_df["TP"].apply(
+                    lambda x: str(int(x)) if pd.notna(x) else "N/A"
+                )
+            )
+
         col1, col2, col3 = st.columns(3)
         with col1:
             x_axis_options = {
                 "Concurrency": "intended concurrency",
                 "Throughput (Output Tok/s)": "output_tok/sec",
             }
+            if not per_turn_plot_df.empty:
+                x_axis_options["Turn (Multi-turn)"] = "turn_index"
             x_axis_label = st.selectbox(
                 "Select X-Axis",
                 options=list(x_axis_options.keys()),
@@ -3912,10 +3930,13 @@ def render_performance_plots_section(filtered_df, use_expander=True):
             y_axis = y_axis_options[y_axis_label]
 
         with col3:
-            if x_axis == "intended concurrency":
+            if x_axis in ("intended concurrency", "turn_index"):
+                _conc_source = (
+                    per_turn_plot_df if x_axis == "turn_index" else filtered_df_sorted
+                )
                 concurrency_values = sorted(
                     int(x)
-                    for x in filtered_df_sorted["intended concurrency"]
+                    for x in _conc_source["intended concurrency"]
                     .dropna()
                     .unique()
                     .tolist()
@@ -3935,9 +3956,14 @@ def render_performance_plots_section(filtered_df, use_expander=True):
                         on_change=keep_expander_open,
                         args=("performance_plots_expanded",),
                     )
-                    filtered_df_sorted = filtered_df_sorted[
-                        filtered_df_sorted["intended concurrency"] <= max_conc
-                    ]
+                    if x_axis == "intended concurrency":
+                        filtered_df_sorted = filtered_df_sorted[
+                            filtered_df_sorted["intended concurrency"] <= max_conc
+                        ]
+                    else:
+                        per_turn_plot_df = per_turn_plot_df[
+                            per_turn_plot_df["intended concurrency"] <= max_conc
+                        ]
 
         # Add units to y-axis label for certain metrics
         y_axis_display_label = y_axis_label
@@ -3948,14 +3974,18 @@ def render_performance_plots_section(filtered_df, use_expander=True):
         elif y_axis == "request_latency_median" or y_axis == "request_latency_max":
             y_axis_display_label = f"{y_axis_label} (s)"
 
-        # Build ISL/OSL subtitle from unique values in the filtered data
+        # Build ISL/OSL subtitle from the active data source
+        _subtitle_src = (
+            per_turn_plot_df if x_axis == "turn_index" and not per_turn_plot_df.empty
+            else filtered_df_sorted
+        )
         _isl_osl_subtitle = ""
         if (
-            "prompt toks" in filtered_df_sorted.columns
-            and "output toks" in filtered_df_sorted.columns
+            "prompt toks" in _subtitle_src.columns
+            and "output toks" in _subtitle_src.columns
         ):
             isl_osl_pairs = (
-                filtered_df_sorted[["prompt toks", "output toks"]]
+                _subtitle_src[["prompt toks", "output toks"]]
                 .dropna()
                 .drop_duplicates()
             )
@@ -3964,11 +3994,11 @@ def render_performance_plots_section(filtered_df, use_expander=True):
                 for _, r in isl_osl_pairs.iterrows():
                     isl, osl = int(r["prompt toks"]), int(r["output toks"])
                     if isl == 0 and osl == 0:
-                        if "dataset" in filtered_df_sorted.columns:
+                        if "dataset" in _subtitle_src.columns:
                             ds_names = (
-                                filtered_df_sorted.loc[
-                                    (filtered_df_sorted["prompt toks"] == 0)
-                                    & (filtered_df_sorted["output toks"] == 0),
+                                _subtitle_src.loc[
+                                    (_subtitle_src["prompt toks"] == 0)
+                                    & (_subtitle_src["output toks"] == 0),
                                     "dataset",
                                 ]
                                 .dropna()
@@ -3981,33 +4011,71 @@ def render_performance_plots_section(filtered_df, use_expander=True):
                 if pair_labels:
                     _isl_osl_subtitle = f"<br><span style='font-size:14px'>ISL/OSL: {', '.join(sorted(set(pair_labels)))}</span>"
 
-        fig = px.line(
-            filtered_df_sorted.sort_values(by=x_axis),
-            x=x_axis,
-            y=y_axis,
-            color="run_identifier",
-            markers=True,
-            title=f"{x_axis_label} vs. {y_axis_label}{_isl_osl_subtitle}",
-            labels={
-                x_axis: x_axis_label,
-                y_axis: y_axis_display_label,
-                "run_identifier": "Run",
-            },
-            template="plotly_white_light",
-            category_orders={
-                "run_identifier": filtered_df_sorted["run_identifier"].unique().tolist()
-            },
-        )
-        _legend_parts = "Accelerator | Model | Version | TP"
-        if _has_dp_data:
-            _legend_parts += " | DP"
-        if (filtered_df_sorted["turns"] > 1).any():
-            _legend_parts += " | Turns/PrefixTokens/PrefixCount"
-        fig.update_layout(
-            legend_title_text=f"Run Details ({_legend_parts})",
-            legend={"font": {"size": 14}},
-        )
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        if x_axis == "turn_index" and not per_turn_plot_df.empty:
+            per_turn_plot_df = per_turn_plot_df.copy()
+            per_turn_plot_df["_plot_label"] = (
+                per_turn_plot_df["run_identifier"]
+                + " | conc="
+                + per_turn_plot_df["intended concurrency"].apply(
+                    lambda x: str(int(x)) if pd.notna(x) else "?"
+                )
+            )
+            _pt_valid = per_turn_plot_df.dropna(subset=[y_axis]).copy() if y_axis in per_turn_plot_df.columns else pd.DataFrame()
+            if _pt_valid.empty:
+                st.info(f"No per-turn data available for '{y_axis_label}'.")
+                fig = None
+            else:
+                fig = px.line(
+                    _pt_valid.sort_values("turn_index"),
+                    x="turn_index",
+                    y=y_axis,
+                    color="_plot_label",
+                    markers=True,
+                    title=f"Turn vs. {y_axis_label}{_isl_osl_subtitle}",
+                    labels={
+                        "turn_index": "Turn",
+                        y_axis: y_axis_display_label,
+                        "_plot_label": "Run | Concurrency",
+                    },
+                    template="plotly_white_light",
+                )
+                fig.update_xaxes(
+                    tickmode="array",
+                    tickvals=sorted(_pt_valid["turn_index"].dropna().unique()),
+                )
+                fig.update_layout(
+                    legend_title_text="Run Details (Accelerator | Model | Version | TP | Concurrency)",
+                    legend={"font": {"size": 14}},
+                )
+        else:
+            fig = px.line(
+                filtered_df_sorted.sort_values(by=x_axis),
+                x=x_axis,
+                y=y_axis,
+                color="run_identifier",
+                markers=True,
+                title=f"{x_axis_label} vs. {y_axis_label}{_isl_osl_subtitle}",
+                labels={
+                    x_axis: x_axis_label,
+                    y_axis: y_axis_display_label,
+                    "run_identifier": "Run",
+                },
+                template="plotly_white_light",
+                category_orders={
+                    "run_identifier": filtered_df_sorted["run_identifier"].unique().tolist()
+                },
+            )
+            _legend_parts = "Accelerator | Model | Version | TP"
+            if _has_dp_data:
+                _legend_parts += " | DP"
+            if (filtered_df_sorted["turns"] > 1).any():
+                _legend_parts += " | Turns/PrefixTokens/PrefixCount"
+            fig.update_layout(
+                legend_title_text=f"Run Details ({_legend_parts})",
+                legend={"font": {"size": 14}},
+            )
+        if fig is not None:
+            st.plotly_chart(fig, use_container_width=True, theme=None)
 
         # Right-align the legend caption
         caption_col1, caption_col2 = st.columns([3, 1])
@@ -11598,9 +11666,27 @@ def main():
     df["prefix_caching"] = df["prefix_caching"].replace("", "no")
 
     if "turn_index" in df.columns:
-        df = df[
-            df["turn_index"].isna() | (df["turn_index"].astype(str).str.strip() == "")
-        ].copy()
+        _ti = df["turn_index"].astype(str).str.strip()
+        per_turn_df = df[df["turn_index"].notna() & (_ti != "") & (_ti != "nan")].copy()
+        if not per_turn_df.empty:
+            per_turn_df["turn_index"] = per_turn_df["turn_index"].astype(float).astype(int)
+            per_turn_df["error_rate"] = (
+                per_turn_df["errored_requests"]
+                / (per_turn_df["successful_requests"] + per_turn_df["errored_requests"])
+                * 100
+            ).fillna(0)
+            per_turn_df["efficiency_ratio"] = per_turn_df["output_tok/sec"] / per_turn_df["TP"]
+            per_turn_df["ttft_p95_s"] = (
+                per_turn_df["ttft_p95"] / 1000 if "ttft_p95" in per_turn_df.columns else np.nan
+            )
+            per_turn_df["ttft_median_s"] = (
+                per_turn_df["ttft_median"] / 1000
+                if "ttft_median" in per_turn_df.columns
+                else np.nan
+            )
+        df = df[df["turn_index"].isna() | (_ti == "") | (_ti == "nan")].copy()
+    else:
+        per_turn_df = pd.DataFrame()
 
     if "turns" not in df.columns:
         df["turns"] = 1
@@ -12775,6 +12861,15 @@ def main():
             & dp_mask
         ].copy()
 
+        if not per_turn_df.empty:
+            filtered_per_turn_df = per_turn_df[
+                per_turn_df["accelerator"].isin(selected_accelerators)
+                & per_turn_df["model"].isin(selected_models)
+                & per_turn_df["version"].isin(selected_versions)
+            ].copy()
+        else:
+            filtered_per_turn_df = pd.DataFrame()
+
         # Detect if filters have changed and close expanders
         current_filter_state = {
             "accelerators": tuple(sorted(selected_accelerators)),
@@ -12916,7 +13011,9 @@ def main():
             elif sel == "🔍 Competitive Analysis":
                 render_competitive_analysis_section(df)
             elif sel == "📊 Performance Plots":
-                render_performance_plots_section(filtered_df, use_expander=False)
+                render_performance_plots_section(
+                    filtered_df, filtered_per_turn_df, use_expander=False
+                )
             elif sel == "📈 Dataset Representation":
                 render_dataset_representation_section(
                     selected_profile, use_expander=False
