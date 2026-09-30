@@ -10588,7 +10588,7 @@ def render_view_logs_section(filtered_df, use_expander=True):
 
 
 @st.fragment
-def render_filtered_data_section(filtered_df, use_expander=True):
+def render_filtered_data_section(filtered_df, per_turn_df=None, use_expander=True):
     """📄 Filtered Data Display Section - View only, no download functionality."""
     if use_expander:
         ctx = st.expander("📄 Filtered Data from the above filters", expanded=False)
@@ -10597,11 +10597,42 @@ def render_filtered_data_section(filtered_df, use_expander=True):
     with ctx:
         if not use_expander:
             st.subheader("📄 Filtered Data")
+
+        _has_per_turn = per_turn_df is not None and not per_turn_df.empty
+        if _has_per_turn:
+            _show_per_turn = st.toggle(
+                "🔄 Show per-turn rows",
+                value=False,
+                key="filtered_data_show_per_turn",
+                help="Switch between aggregate rows (one per concurrency level) and per-turn breakdown rows",
+            )
+        else:
+            _show_per_turn = False
+
         st.info(
             "💡 **Tips**: Hover over column headers to see detailed descriptions of each field. "
             "Select a row to view its server log."
+            + (
+                " Per-turn rows (turn_index 0, 1, 2…) are shown below each aggregate row."
+                if _show_per_turn and _has_per_turn
+                else ""
+            )
         )
-        display_filtered_df = filtered_df.copy()
+        if _show_per_turn and _has_per_turn:
+            display_filtered_df = (
+                pd.concat([filtered_df, per_turn_df], ignore_index=True)
+                .sort_values(
+                    ["model", "intended concurrency", "turn_index"],
+                    key=lambda s: pd.to_numeric(s, errors="coerce").fillna(
+                        -1 if s.name == "turn_index" else s.rank(method="dense")
+                    ),
+                )
+                .reset_index(drop=True)
+            )
+        else:
+            display_filtered_df = filtered_df.copy()
+            if "turn_index" in display_filtered_df.columns:
+                display_filtered_df = display_filtered_df.drop(columns=["turn_index"])
         display_filtered_df.reset_index(drop=True, inplace=True)
         display_filtered_df.insert(0, "Row #", range(1, len(display_filtered_df) + 1))
 
@@ -11422,7 +11453,7 @@ def main():
         }
 
         def encode_filters_to_url(accelerators, models, versions, profile, tp_sizes):
-            """Encode main filter state to URL parameters."""
+            """Encode main filter state and active section widget state to URL parameters."""
             url_params = {}
 
             if accelerators:
@@ -11435,6 +11466,21 @@ def main():
                 url_params["profile"] = profile
             if tp_sizes:
                 url_params["tp_sizes"] = ",".join(map(str, tp_sizes))
+
+            # Also push active section's widget state so the bare URL bar is shareable
+            active_slug = SECTION_TO_SLUG.get(
+                st.session_state.get("active_section", ""), ""
+            )
+            if active_slug:
+                url_params["section"] = active_slug
+                for url_key, ss_key in SECTION_FILTER_KEYS.get(active_slug, {}).items():
+                    val = st.session_state.get(ss_key)
+                    if val is not None:
+                        url_params[url_key] = (
+                            ",".join(map(str, val))
+                            if isinstance(val, list)
+                            else str(val)
+                        )
 
             st.query_params.update(url_params)
 
@@ -11705,13 +11751,11 @@ def main():
         _ti = df["turn_index"].astype(str).str.strip()
         per_turn_df = df[df["turn_index"].notna() & (_ti != "") & (_ti != "nan")].copy()
         if not per_turn_df.empty:
-            per_turn_df["turn_index"] = (
-                pd.to_numeric(per_turn_df["turn_index"], errors="coerce")
-                .dropna()
-                .astype(int)
-                .reindex(per_turn_df.index)
+            per_turn_df["turn_index"] = pd.to_numeric(
+                per_turn_df["turn_index"], errors="coerce"
             )
             per_turn_df = per_turn_df[per_turn_df["turn_index"].notna()].copy()
+            per_turn_df["turn_index"] = per_turn_df["turn_index"].astype(int)
             if (
                 "errored_requests" in per_turn_df.columns
                 and "successful_requests" in per_turn_df.columns
@@ -11741,6 +11785,35 @@ def main():
                 per_turn_df["ttft_median"] / 1000
                 if "ttft_median" in per_turn_df.columns
                 else np.nan
+            )
+            # Mirror the same normalizations applied to df below so _apply_filters
+            # types match the sidebar multiselect values (which are sourced from df).
+            per_turn_df["turns"] = per_turn_df["turns"].fillna(1).astype(int)
+            _str_norm = lambda v: (  # noqa: E731
+                str(int(float(v))) if v != "" and str(v) not in ("", "nan") else ""
+            )
+            per_turn_df["prefix_tokens"] = (
+                per_turn_df.get("prefix_tokens", pd.Series("", index=per_turn_df.index))
+                .fillna("")
+                .apply(_str_norm)
+            )
+            per_turn_df["prefix_count"] = (
+                per_turn_df.get("prefix_count", pd.Series("", index=per_turn_df.index))
+                .fillna("")
+                .apply(_str_norm)
+            )
+            per_turn_df["spec_decoding"] = (
+                per_turn_df.get("spec_decoding", pd.Series("", index=per_turn_df.index))
+                .fillna("")
+                .astype(str)
+            )
+            per_turn_df["prefix_caching"] = (
+                per_turn_df.get(
+                    "prefix_caching", pd.Series("", index=per_turn_df.index)
+                )
+                .fillna("")
+                .astype(str)
+                .replace("no", "")
             )
         df = df[df["turn_index"].isna() | (_ti == "") | (_ti == "nan")].copy()
     else:
@@ -13099,7 +13172,9 @@ def main():
             elif sel == "📋 View Logs":
                 render_view_logs_section(filtered_df, use_expander=False)
             elif sel == "📄 Filtered Data":
-                render_filtered_data_section(filtered_df, use_expander=False)
+                render_filtered_data_section(
+                    filtered_df, filtered_per_turn_df, use_expander=False
+                )
 
         _render_selected_section(current_section)
 
