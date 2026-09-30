@@ -3871,7 +3871,7 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
             _sort_cols.append("DP")
         filtered_df_sorted = filtered_df.sort_values(_sort_cols).copy()
 
-        # Build per-turn plot df with run_identifier
+        # Build per-turn plot df with run_identifier (same suffixes as filtered_df)
         per_turn_plot_df = pd.DataFrame()
         if per_turn_df is not None and not per_turn_df.empty:
             per_turn_plot_df = per_turn_df.copy()
@@ -3886,6 +3886,18 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                     lambda x: str(int(x)) if pd.notna(x) else "N/A"
                 )
             )
+            if _has_dp_data and "DP" in per_turn_plot_df.columns:
+                per_turn_plot_df["run_identifier"] += per_turn_plot_df["DP"].apply(
+                    lambda x: f" | DP={int(x)}" if pd.notna(x) else ""
+                )
+            if "spec_decoding" in per_turn_plot_df.columns and per_turn_plot_df["spec_decoding"].any():
+                per_turn_plot_df["run_identifier"] += per_turn_plot_df["spec_decoding"].apply(
+                    lambda x: f" | SD={x}" if x else ""
+                )
+            if "prefix_caching" in per_turn_plot_df.columns and per_turn_plot_df["prefix_caching"].any():
+                per_turn_plot_df["run_identifier"] += per_turn_plot_df["prefix_caching"].apply(
+                    lambda x: f" | PC={x}" if x else ""
+                )
 
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -3965,6 +3977,9 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                             per_turn_plot_df["intended concurrency"] <= max_conc
                         ]
 
+        # Evaluate once so all branches below stay consistent
+        _is_turn_view = x_axis == "turn_index" and not per_turn_plot_df.empty
+
         # Add units to y-axis label for certain metrics
         y_axis_display_label = y_axis_label
         if y_axis in ("ttft_p95_s", "ttft_median_s"):
@@ -3975,10 +3990,7 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
             y_axis_display_label = f"{y_axis_label} (s)"
 
         # Build ISL/OSL subtitle from the active data source
-        _subtitle_src = (
-            per_turn_plot_df if x_axis == "turn_index" and not per_turn_plot_df.empty
-            else filtered_df_sorted
-        )
+        _subtitle_src = per_turn_plot_df if _is_turn_view else filtered_df_sorted
         _isl_osl_subtitle = ""
         if (
             "prompt toks" in _subtitle_src.columns
@@ -4011,7 +4023,7 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                 if pair_labels:
                     _isl_osl_subtitle = f"<br><span style='font-size:14px'>ISL/OSL: {', '.join(sorted(set(pair_labels)))}</span>"
 
-        if x_axis == "turn_index" and not per_turn_plot_df.empty:
+        if _is_turn_view:
             per_turn_plot_df = per_turn_plot_df.copy()
             per_turn_plot_df["_plot_label"] = (
                 per_turn_plot_df["run_identifier"]
@@ -11669,13 +11681,30 @@ def main():
         _ti = df["turn_index"].astype(str).str.strip()
         per_turn_df = df[df["turn_index"].notna() & (_ti != "") & (_ti != "nan")].copy()
         if not per_turn_df.empty:
-            per_turn_df["turn_index"] = per_turn_df["turn_index"].astype(float).astype(int)
-            per_turn_df["error_rate"] = (
-                per_turn_df["errored_requests"]
-                / (per_turn_df["successful_requests"] + per_turn_df["errored_requests"])
-                * 100
-            ).fillna(0)
-            per_turn_df["efficiency_ratio"] = per_turn_df["output_tok/sec"] / per_turn_df["TP"]
+            per_turn_df["turn_index"] = (
+                pd.to_numeric(per_turn_df["turn_index"], errors="coerce")
+                .dropna()
+                .astype(int)
+                .reindex(per_turn_df.index)
+            )
+            per_turn_df = per_turn_df[per_turn_df["turn_index"].notna()].copy()
+            if (
+                "errored_requests" in per_turn_df.columns
+                and "successful_requests" in per_turn_df.columns
+            ):
+                per_turn_df["error_rate"] = (
+                    per_turn_df["errored_requests"]
+                    / (per_turn_df["successful_requests"] + per_turn_df["errored_requests"])
+                    * 100
+                ).fillna(0)
+            else:
+                per_turn_df["error_rate"] = np.nan
+            if "output_tok/sec" in per_turn_df.columns and "TP" in per_turn_df.columns:
+                per_turn_df["efficiency_ratio"] = (
+                    per_turn_df["output_tok/sec"] / per_turn_df["TP"]
+                ).replace([np.inf, -np.inf], np.nan)
+            else:
+                per_turn_df["efficiency_ratio"] = np.nan
             per_turn_df["ttft_p95_s"] = (
                 per_turn_df["ttft_p95"] / 1000 if "ttft_p95" in per_turn_df.columns else np.nan
             )
@@ -12843,32 +12872,71 @@ def main():
             if selected_mt_prefix_count is not None
             else True
         )
-        tp_mask = df["TP"].isin(selected_tp) | df["TP"].isna()
-        filtered_df = df[
-            df["accelerator"].isin(selected_accelerators)
-            & df["model"].isin(selected_models)
-            & df["version"].isin(selected_versions)
-            & (df["profile"].isin(selected_profiles) if selected_profiles else True)
-            & tp_mask
-            & custom_mask
-            & dataset_mask
-            & spec_decoding_mask
-            & prefix_caching_mask
-            & multiturn_isl_osl_mask
-            & mt_turns_mask
-            & mt_prefix_tokens_mask
-            & mt_prefix_count_mask
-            & dp_mask
-        ].copy()
-
-        if not per_turn_df.empty:
-            filtered_per_turn_df = per_turn_df[
-                per_turn_df["accelerator"].isin(selected_accelerators)
-                & per_turn_df["model"].isin(selected_models)
-                & per_turn_df["version"].isin(selected_versions)
+        def _apply_filters(d):
+            """Apply all sidebar filters to any DataFrame with the same schema."""
+            _tp = d["TP"].isin(selected_tp) | d["TP"].isna()
+            _dp = (
+                (d["DP"].isin(selected_dp) | d["DP"].isna())
+                if st.session_state.get("show_advanced_filters", False) and _has_dp and selected_dp
+                else True
+            )
+            _custom = (
+                (d["custom_isl_osl"] == selected_custom_isl_osl)
+                if selected_profile == "Custom ISL/OSL" and selected_custom_isl_osl
+                else True
+            )
+            _dataset = (
+                (d["dataset"] == selected_dataset_filter)
+                if selected_dataset_filter is not None
+                else True
+            )
+            _sd = (
+                d["spec_decoding"].isin(selected_spec_decoding_filter)
+                if selected_spec_decoding_filter
+                else True
+            )
+            _pc = (
+                d["prefix_caching"].isin(selected_prefix_caching_filter)
+                if selected_prefix_caching_filter
+                else True
+            )
+            _mt_isl_osl = (
+                (d["multiturn_isl_osl"] == selected_multiturn_isl_osl)
+                if selected_profile == "Multi-turn" and selected_multiturn_isl_osl
+                else True
+            )
+            _mt_turns = (
+                d["turns"].isin(selected_mt_turns) if selected_mt_turns is not None else True
+            )
+            _mt_pt = (
+                d["prefix_tokens"].isin(selected_mt_prefix_tokens)
+                if selected_mt_prefix_tokens is not None
+                else True
+            )
+            _mt_pc = (
+                d["prefix_count"].isin(selected_mt_prefix_count)
+                if selected_mt_prefix_count is not None
+                else True
+            )
+            return d[
+                d["accelerator"].isin(selected_accelerators)
+                & d["model"].isin(selected_models)
+                & d["version"].isin(selected_versions)
+                & (d["profile"].isin(selected_profiles) if selected_profiles else True)
+                & _tp
+                & _custom
+                & _dataset
+                & _sd
+                & _pc
+                & _mt_isl_osl
+                & _mt_turns
+                & _mt_pt
+                & _mt_pc
+                & _dp
             ].copy()
-        else:
-            filtered_per_turn_df = pd.DataFrame()
+
+        filtered_df = _apply_filters(df)
+        filtered_per_turn_df = _apply_filters(per_turn_df) if not per_turn_df.empty else pd.DataFrame()
 
         # Detect if filters have changed and close expanders
         current_filter_state = {
