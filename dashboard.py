@@ -3904,6 +3904,20 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                 per_turn_plot_df["run_identifier"] += per_turn_plot_df[
                     "prefix_caching"
                 ].apply(lambda x: f" | PC={x}" if x else "")
+            if (
+                "turns" in per_turn_plot_df.columns
+                and (per_turn_plot_df["turns"] > 1).any()
+            ):
+                per_turn_plot_df["run_identifier"] += per_turn_plot_df.apply(
+                    lambda r: (
+                        f" | {r['turns']}T"
+                        + (f"/{r['prefix_tokens']}pt" if r.get("prefix_tokens") else "")
+                        + (f"/{r['prefix_count']}pc" if r.get("prefix_count") else "")
+                        if r["turns"] > 1
+                        else ""
+                    ),
+                    axis=1,
+                )
 
         col1, col2, col3 = st.columns(3)
         with col1:
