@@ -135,7 +135,7 @@ The script outputs 53 columns compatible with the performance dashboard:
 | 5   | `prompt toks`             | Configured prompt token count                        |
 | 6   | `output toks`             | Configured output token count                        |
 | 7   | `turn_index`              | Per-turn breakdown index (empty for aggregate rows)  |
-| 9   | `TP`                      | Tensor parallelism size                              |
+| 8   | `TP`                      | Tensor parallelism size                              |
 | 9   | `measured concurrency`    | Actual measured concurrency                          |
 | 10  | `intended concurrency`    | Requested concurrency (streams)                      |
 | 11  | `measured rps`            | Requests per second                                  |
