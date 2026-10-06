@@ -11532,10 +11532,8 @@ def main():
                 "energy_model_filter",
                 "perf_plots_turn_concurrency",
             }
-            NUMERIC_LIST_SESSION_KEYS = {
-                "trends_tp_multi",
-                "perf_plots_turn_concurrency",
-            }
+            NUMERIC_LIST_SESSION_KEYS = {"trends_tp_multi"}
+            INT_LIST_SESSION_KEYS = {"perf_plots_turn_concurrency"}
             INT_SESSION_KEYS = {
                 "perf_plots_max_concurrency",
                 "model_comparison_concurrency",
@@ -11560,6 +11558,14 @@ def main():
                                                 ValueError, OverflowError
                                             ):
                                                 converted.append(float(v))
+                                        parts = converted
+                                    elif ss_key in INT_LIST_SESSION_KEYS:
+                                        converted = []
+                                        for v in parts:
+                                            with contextlib.suppress(
+                                                ValueError, OverflowError
+                                            ):
+                                                converted.append(int(v))
                                         parts = converted
                                     url_section_filters[ss_key] = parts
                                 elif ss_key in INT_SESSION_KEYS:
