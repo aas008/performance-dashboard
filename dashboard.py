@@ -3929,13 +3929,10 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
             y_axis = y_axis_options[y_axis_label]
 
         with col3:
-            if x_axis in ("intended concurrency", "turn_index"):
-                _conc_source = (
-                    per_turn_plot_df if x_axis == "turn_index" else filtered_df_sorted
-                )
+            if x_axis == "intended concurrency":
                 concurrency_values = sorted(
                     int(x)
-                    for x in _conc_source["intended concurrency"]
+                    for x in filtered_df_sorted["intended concurrency"]
                     .dropna()
                     .unique()
                     .tolist()
@@ -3955,13 +3952,39 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                         on_change=keep_expander_open,
                         args=("performance_plots_expanded",),
                     )
-                    if x_axis == "intended concurrency":
-                        filtered_df_sorted = filtered_df_sorted[
-                            filtered_df_sorted["intended concurrency"] <= max_conc
-                        ]
-                    else:
+                    filtered_df_sorted = filtered_df_sorted[
+                        filtered_df_sorted["intended concurrency"] <= max_conc
+                    ]
+            elif x_axis == "turn_index" and not per_turn_plot_df.empty:
+                concurrency_values = sorted(
+                    int(x)
+                    for x in per_turn_plot_df["intended concurrency"]
+                    .dropna()
+                    .unique()
+                    .tolist()
+                )
+                if concurrency_values:
+                    _turn_conc_key = "perf_plots_turn_concurrency"
+                    if _turn_conc_key not in st.session_state or not any(
+                        c in concurrency_values
+                        for c in (st.session_state.get(_turn_conc_key) or [])
+                    ):
+                        st.session_state[_turn_conc_key] = [max(concurrency_values)]
+                    selected_concs = st.multiselect(
+                        "Concurrency",
+                        options=concurrency_values,
+                        key=_turn_conc_key,
+                        on_change=keep_expander_open,
+                        args=("performance_plots_expanded",),
+                    )
+                    st.caption(
+                        "💡 Select multiple concurrency levels to compare turn curves side by side."
+                    )
+                    if selected_concs:
                         per_turn_plot_df = per_turn_plot_df[
-                            per_turn_plot_df["intended concurrency"] <= max_conc
+                            per_turn_plot_df["intended concurrency"].isin(
+                                selected_concs
+                            )
                         ]
 
         # Evaluate once so all branches below stay consistent
@@ -12400,13 +12423,13 @@ def main():
                 temp_df = temp_df[
                     temp_df["multiturn_isl_osl"] == selected_multiturn_isl_osl
                 ]
-            if selected_mt_turns is not None:
+            if selected_mt_turns:
                 temp_df = temp_df[temp_df["turns"].isin(selected_mt_turns)]
-            if selected_mt_prefix_tokens is not None:
+            if selected_mt_prefix_tokens:
                 temp_df = temp_df[
                     temp_df["prefix_tokens"].isin(selected_mt_prefix_tokens)
                 ]
-            if selected_mt_prefix_count is not None:
+            if selected_mt_prefix_count:
                 temp_df = temp_df[
                     temp_df["prefix_count"].isin(selected_mt_prefix_count)
                 ]
@@ -12576,13 +12599,13 @@ def main():
                 temp_df = temp_df[
                     temp_df["multiturn_isl_osl"] == selected_multiturn_isl_osl
                 ]
-            if selected_mt_turns is not None:
+            if selected_mt_turns:
                 temp_df = temp_df[temp_df["turns"].isin(selected_mt_turns)]
-            if selected_mt_prefix_tokens is not None:
+            if selected_mt_prefix_tokens:
                 temp_df = temp_df[
                     temp_df["prefix_tokens"].isin(selected_mt_prefix_tokens)
                 ]
-            if selected_mt_prefix_count is not None:
+            if selected_mt_prefix_count:
                 temp_df = temp_df[
                     temp_df["prefix_count"].isin(selected_mt_prefix_count)
                 ]
@@ -13054,13 +13077,13 @@ def main():
                         str(int(v)) if isinstance(v, float) and v == int(v) else str(v)
                     )
 
-                if selected_mt_turns is not None:
+                if selected_mt_turns:
                     desired_params["mt_turns"] = ",".join(map(_fmt, selected_mt_turns))
-                if selected_mt_prefix_tokens is not None:
+                if selected_mt_prefix_tokens:
                     desired_params["mt_prefix_tokens"] = ",".join(
                         map(_fmt, selected_mt_prefix_tokens)
                     )
-                if selected_mt_prefix_count is not None:
+                if selected_mt_prefix_count:
                     desired_params["mt_prefix_count"] = ",".join(
                         map(_fmt, selected_mt_prefix_count)
                     )
