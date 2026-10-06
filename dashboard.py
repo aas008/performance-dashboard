@@ -3843,11 +3843,11 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
         if per_turn_df is not None and not per_turn_df.empty:
             per_turn_plot_df = per_turn_df.copy()
             per_turn_plot_df["run_identifier"] = (
-                per_turn_plot_df["accelerator"]
+                per_turn_plot_df["accelerator"].fillna("?")
                 + " | "
-                + per_turn_plot_df["model"]
+                + per_turn_plot_df["model"].fillna("?")
                 + " | "
-                + per_turn_plot_df["version"]
+                + per_turn_plot_df["version"].fillna("?")
                 + " | TP="
                 + per_turn_plot_df["TP"].apply(
                     lambda x: str(int(x)) if pd.notna(x) else "N/A"
@@ -3965,11 +3965,18 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                 )
                 if concurrency_values:
                     _turn_conc_key = "perf_plots_turn_concurrency"
-                    if _turn_conc_key not in st.session_state or not any(
-                        c in concurrency_values
-                        for c in (st.session_state.get(_turn_conc_key) or [])
-                    ):
+                    if _turn_conc_key not in st.session_state:
                         st.session_state[_turn_conc_key] = [max(concurrency_values)]
+                    else:
+                        # Filter stored list to only still-valid values; reset to max if all stale
+                        _valid = [
+                            c
+                            for c in (st.session_state[_turn_conc_key] or [])
+                            if c in concurrency_values
+                        ]
+                        st.session_state[_turn_conc_key] = _valid or [
+                            max(concurrency_values)
+                        ]
                     selected_concs = st.multiselect(
                         "Concurrency",
                         options=concurrency_values,
@@ -4032,7 +4039,6 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                     _isl_osl_subtitle = f"<br><span style='font-size:14px'>ISL/OSL: {', '.join(sorted(set(pair_labels)))}</span>"
 
         if _is_turn_view:
-            per_turn_plot_df = per_turn_plot_df.copy()
             per_turn_plot_df["_plot_label"] = (
                 per_turn_plot_df["run_identifier"]
                 + " | conc="
@@ -4071,6 +4077,11 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                     legend_title_text="Run Details (Accelerator | Model | Version | TP | Concurrency)",
                     legend={"font": {"size": 14}},
                 )
+        elif x_axis == "turn_index":
+            # Turn x-axis selected but per_turn_plot_df is empty — don't fall through
+            # to the aggregate sort which would sort by NaN turn_index values.
+            st.info("No per-turn data available for the current filter selection.")
+            fig = None
         else:
             fig = px.line(
                 filtered_df_sorted.sort_values(by=x_axis),
@@ -4111,17 +4122,23 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
         # Push all perf-plots URL params directly — fragment reruns don't trigger
         # the parent encode_filters_to_url / from_dict, so widgets changed inside
         # the fragment would otherwise leave the URL stale.
-        with contextlib.suppress(Exception):
+        # Suppress only Streamlit API errors (e.g. no session context outside a run);
+        # let TypeError/AttributeError from bad values surface for debugging.
+        try:
             st.query_params["pp_x"] = x_axis_label
             st.query_params["pp_y"] = y_axis_label
             if x_axis == "intended concurrency":
                 conc_val = st.session_state.get("perf_plots_max_concurrency")
                 if conc_val is not None:
-                    st.query_params["pp_conc"] = str(conc_val)
+                    st.query_params["pp_conc"] = str(int(conc_val))
             elif x_axis == "turn_index":
                 turn_conc = st.session_state.get("perf_plots_turn_concurrency")
                 if turn_conc:
-                    st.query_params["pp_turn_conc"] = ",".join(map(str, turn_conc))
+                    st.query_params["pp_turn_conc"] = ",".join(
+                        str(int(c)) for c in turn_conc
+                    )
+        except Exception:  # noqa: BLE001
+            pass  # Outside Streamlit session context — no-op
 
 
 def load_pareto_data(csv_file_path, preloaded_df=None):
@@ -10523,10 +10540,9 @@ def render_filtered_data_section(filtered_df, per_turn_df=None, use_expander=Tru
                 .reset_index(drop=True)
             )
         else:
-            display_filtered_df = filtered_df.copy()
+            display_filtered_df = filtered_df.copy().reset_index(drop=True)
             if "turn_index" in display_filtered_df.columns:
                 display_filtered_df = display_filtered_df.drop(columns=["turn_index"])
-        display_filtered_df.reset_index(drop=True, inplace=True)
         display_filtered_df.insert(0, "Row #", range(1, len(display_filtered_df) + 1))
 
         # Add Run Date column from guidellm_start_time_ms (epoch milliseconds)
@@ -11640,6 +11656,11 @@ def main():
         df["prefix_caching"] = ""
     df["prefix_caching"] = df["prefix_caching"].fillna("").astype(str).replace("no", "")
 
+    # Shared normalizer for numeric-string columns (prefix_tokens, prefix_count)
+    # used by both the per_turn_df and df preprocessing paths below.
+    def _str_norm(v):
+        return str(int(float(v))) if v != "" and str(v) not in ("", "nan") else ""
+
     if "turn_index" in df.columns:
         _ti = df["turn_index"].astype(str).str.strip()
         per_turn_df = df[df["turn_index"].notna() & (_ti != "") & (_ti != "nan")].copy()
@@ -11686,9 +11707,6 @@ def main():
                 .fillna(1)
                 .astype(int)
             )
-            _str_norm = lambda v: (  # noqa: E731
-                str(int(float(v))) if v != "" and str(v) not in ("", "nan") else ""
-            )
             per_turn_df["prefix_tokens"] = (
                 per_turn_df.get("prefix_tokens", pd.Series("", index=per_turn_df.index))
                 .fillna("")
@@ -11722,27 +11740,11 @@ def main():
 
     if "prefix_tokens" not in df.columns:
         df["prefix_tokens"] = ""
-    df["prefix_tokens"] = (
-        df["prefix_tokens"]
-        .fillna("")
-        .apply(
-            lambda v: (
-                str(int(float(v))) if v != "" and str(v) not in ("", "nan") else ""
-            )
-        )
-    )
+    df["prefix_tokens"] = df["prefix_tokens"].fillna("").apply(_str_norm)
 
     if "prefix_count" not in df.columns:
         df["prefix_count"] = ""
-    df["prefix_count"] = (
-        df["prefix_count"]
-        .fillna("")
-        .apply(
-            lambda v: (
-                str(int(float(v))) if v != "" and str(v) not in ("", "nan") else ""
-            )
-        )
-    )
+    df["prefix_count"] = df["prefix_count"].fillna("").apply(_str_norm)
 
     if "request_type" not in df.columns:
         df["request_type"] = ""
