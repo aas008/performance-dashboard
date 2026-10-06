@@ -3980,6 +3980,13 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                     st.caption(
                         "💡 Select multiple concurrency levels to compare turn curves side by side."
                     )
+                    # Push directly to URL — fragment reruns don't trigger the main
+                    # encode_filters_to_url call, so we update query_params here.
+                    with contextlib.suppress(Exception):
+                        if selected_concs:
+                            st.query_params["pp_turn_conc"] = ",".join(
+                                map(str, selected_concs)
+                            )
                     if selected_concs:
                         per_turn_plot_df = per_turn_plot_df[
                             per_turn_plot_df["intended concurrency"].isin(
