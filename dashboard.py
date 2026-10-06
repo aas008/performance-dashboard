@@ -11811,7 +11811,11 @@ def main():
             )
             # Mirror the same normalizations applied to df below so _apply_filters
             # types match the sidebar multiselect values (which are sourced from df).
-            per_turn_df["turns"] = per_turn_df["turns"].fillna(1).astype(int)
+            per_turn_df["turns"] = (
+                per_turn_df.get("turns", pd.Series(1, index=per_turn_df.index))
+                .fillna(1)
+                .astype(int)
+            )
             _str_norm = lambda v: (  # noqa: E731
                 str(int(float(v))) if v != "" and str(v) not in ("", "nan") else ""
             )
