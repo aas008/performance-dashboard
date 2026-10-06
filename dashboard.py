@@ -11282,6 +11282,7 @@ def main():
                 "pp_x": "perf_plots_x_axis",
                 "pp_y": "perf_plots_y_axis",
                 "pp_conc": "perf_plots_max_concurrency",
+                "pp_turn_conc": "perf_plots_turn_concurrency",
             },
             "pareto": {
                 "par_model": "pareto_model_select",
@@ -11529,8 +11530,12 @@ def main():
                 "trends_tp_multi",
                 "energy_accelerator_filter",
                 "energy_model_filter",
+                "perf_plots_turn_concurrency",
             }
-            NUMERIC_LIST_SESSION_KEYS = {"trends_tp_multi"}
+            NUMERIC_LIST_SESSION_KEYS = {
+                "trends_tp_multi",
+                "perf_plots_turn_concurrency",
+            }
             INT_SESSION_KEYS = {
                 "perf_plots_max_concurrency",
                 "model_comparison_concurrency",
