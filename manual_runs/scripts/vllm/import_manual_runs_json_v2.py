@@ -641,6 +641,7 @@ def main():
             "dataset",
             "spec_decoding",
             "prefix_caching",
+            "turn_index",
             "turns",
             "prefix_tokens",
             "prefix_count",
