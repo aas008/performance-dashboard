@@ -4013,13 +4013,6 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                     st.caption(
                         "💡 Select multiple concurrency levels to compare turn curves side by side."
                     )
-                    # Push directly to URL — fragment reruns don't trigger the main
-                    # encode_filters_to_url call, so we update query_params here.
-                    with contextlib.suppress(Exception):
-                        if selected_concs:
-                            st.query_params["pp_turn_conc"] = ",".join(
-                                map(str, selected_concs)
-                            )
                     if selected_concs:
                         per_turn_plot_df = per_turn_plot_df[
                             per_turn_plot_df["intended concurrency"].isin(
@@ -4147,6 +4140,21 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
         caption_col1, caption_col2 = st.columns([3, 1])
         with caption_col2:
             st.caption("📜 **Tip**: Scroll within the legend box to see all runs")
+
+        # Push all perf-plots URL params directly — fragment reruns don't trigger
+        # the parent encode_filters_to_url / from_dict, so widgets changed inside
+        # the fragment would otherwise leave the URL stale.
+        with contextlib.suppress(Exception):
+            st.query_params["pp_x"] = x_axis_label
+            st.query_params["pp_y"] = y_axis_label
+            if x_axis == "intended concurrency":
+                conc_val = st.session_state.get("perf_plots_max_concurrency")
+                if conc_val is not None:
+                    st.query_params["pp_conc"] = str(conc_val)
+            elif x_axis == "turn_index":
+                turn_conc = st.session_state.get("perf_plots_turn_concurrency")
+                if turn_conc:
+                    st.query_params["pp_turn_conc"] = ",".join(map(str, turn_conc))
 
 
 def load_pareto_data(csv_file_path, preloaded_df=None):
