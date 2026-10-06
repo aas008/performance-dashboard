@@ -205,6 +205,7 @@ def process_benchmark_section(
         "dataset": dataset,
         "spec_decoding": spec_decoding,
         "prefix_caching": prefix_caching,
+        "turn_index": "",
         "turns": turns,
         "prefix_tokens": detected_prefix_tokens
         if detected_prefix_tokens is not None
