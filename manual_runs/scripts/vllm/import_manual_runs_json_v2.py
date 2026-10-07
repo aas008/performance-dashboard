@@ -13,6 +13,125 @@ import os
 import pandas as pd
 
 
+def _percentile(values, p):
+    """Return the p-th percentile of a sorted list, or None if empty."""
+    if not values:
+        return None
+    values = sorted(values)
+    idx = (len(values) - 1) * p / 100
+    lo, hi = int(idx), min(int(idx) + 1, len(values) - 1)
+    return values[lo] + (values[hi] - values[lo]) * (idx - lo)
+
+
+def extract_per_turn_rows(benchmark, base_row):
+    """Extract per-turn breakdown rows from request-level data in a benchmark section.
+
+    For each turn_index found in requests.successful, computes per-turn stats
+    (TTFT, ITL, TPOT, latency, throughput) and returns one row dict per turn.
+    Returns an empty list if no turn_index data is present.
+
+    Args:
+        benchmark: A single benchmark dict from the guidellm JSON.
+        base_row: The aggregate row dict produced by process_benchmark_section —
+                  used as the metadata template for per-turn rows.
+
+    Returns:
+        list[dict]: Per-turn row dicts ready to append to all_run_data.
+    """
+    requests = benchmark.get("requests", {})
+    successful = requests.get("successful", [])
+    errored = requests.get("errored", [])
+
+    if not successful and not errored:
+        return []
+
+    # Discover all turn indices from both buckets
+    all_turns = set()
+    for req in successful + errored:
+        info = req.get("info", {})
+        ti = info.get("turn_index")
+        if ti is not None:
+            try:
+                all_turns.add(str(int(float(ti))))
+            except (ValueError, TypeError):
+                pass
+
+    if not all_turns:
+        return []
+
+    # Group successful requests by turn_index
+    by_turn = {}
+    for req in successful:
+        info = req.get("info", {})
+        ti = info.get("turn_index")
+        if ti is None:
+            continue
+        try:
+            key = str(int(float(ti)))
+        except (ValueError, TypeError):
+            continue
+        by_turn.setdefault(key, []).append(req)
+
+    # Group errored requests by turn_index for error counts
+    err_by_turn = {}
+    for req in errored:
+        info = req.get("info", {})
+        ti = info.get("turn_index")
+        if ti is None:
+            continue
+        try:
+            key = str(int(float(ti)))
+        except (ValueError, TypeError):
+            continue
+        err_by_turn.setdefault(key, []).append(req)
+
+    per_turn_rows = []
+    for turn_key in sorted(all_turns, key=lambda x: int(x)):
+        reqs = by_turn.get(turn_key, [])
+        n_err = len(err_by_turn.get(turn_key, []))
+
+        ttfts = [r.get("time_to_first_token_ms") for r in reqs if r.get("time_to_first_token_ms") is not None]
+        itls = [r.get("inter_token_latency_ms") for r in reqs if r.get("inter_token_latency_ms") is not None]
+        tpots = [r.get("time_per_output_token_ms") for r in reqs if r.get("time_per_output_token_ms") is not None]
+        lats = [r.get("request_latency") for r in reqs if r.get("request_latency") is not None]
+        out_tps = [r.get("output_tokens_per_second") for r in reqs if r.get("output_tokens_per_second") is not None]
+        total_tps = [r.get("tokens_per_second") for r in reqs if r.get("tokens_per_second") is not None]
+        out_toks = [r.get("output_tokens") for r in reqs if r.get("output_tokens") is not None]
+        prompt_toks = [r.get("prompt_tokens") for r in reqs if r.get("prompt_tokens") is not None]
+
+        row = dict(base_row)
+        row["turn_index"] = int(turn_key)
+        row["successful_requests"] = len(reqs)
+        row["errored_requests"] = n_err
+        row["ttft_median"] = _percentile(ttfts, 50)
+        row["ttft_p95"] = _percentile(ttfts, 95)
+        row["ttft_p99"] = _percentile(ttfts, 99)
+        row["ttft_p1"] = _percentile(ttfts, 1)
+        row["ttft_p999"] = _percentile(ttfts, 99.9)
+        row["ttft_mean"] = (sum(ttfts) / len(ttfts)) if ttfts else None
+        row["itl_median"] = _percentile(itls, 50)
+        row["itl_p95"] = _percentile(itls, 95)
+        row["itl_p99"] = _percentile(itls, 99)
+        row["itl_p1"] = _percentile(itls, 1)
+        row["itl_p999"] = _percentile(itls, 99.9)
+        row["itl_mean"] = (sum(itls) / len(itls)) if itls else None
+        row["tpot_median"] = _percentile(tpots, 50)
+        row["tpot_p95"] = _percentile(tpots, 95)
+        row["tpot_p99"] = _percentile(tpots, 99)
+        row["tpot_p1"] = _percentile(tpots, 1)
+        row["tpot_p999"] = _percentile(tpots, 99.9)
+        row["request_latency_median"] = _percentile(lats, 50)
+        row["request_latency_min"] = min(lats) if lats else None
+        row["request_latency_max"] = max(lats) if lats else None
+        row["output_tok/sec"] = (sum(out_tps) / len(out_tps)) if out_tps else None
+        row["total_tok/sec"] = (sum(total_tps) / len(total_tps)) if total_tps else None
+        row["output_token_count_mean"] = (sum(out_toks) / len(out_toks)) if out_toks else None
+        row["prompt_token_count_mean"] = (sum(prompt_toks) / len(prompt_toks)) if prompt_toks else None
+        per_turn_rows.append(row)
+
+    return per_turn_rows
+
+
 def process_benchmark_section(
     benchmark,
     accelerator,
@@ -329,11 +448,14 @@ def parse_guidellm_json(
         )
         if row_data:
             all_run_data.append(row_data)
+            per_turn = extract_per_turn_rows(benchmark, row_data)
+            all_run_data.extend(per_turn)
             streams = (
                 benchmark.get("config", {}).get("strategy", {}).get("streams", "?")
             )
+            turn_msg = f", {len(per_turn)} per-turn rows" if per_turn else ""
             print(
-                f"  Processed benchmark {i + 1}/{len(benchmarks)} (streams={streams})"
+                f"  Processed benchmark {i + 1}/{len(benchmarks)} (streams={streams}{turn_msg})"
             )
 
     if all_run_data:
