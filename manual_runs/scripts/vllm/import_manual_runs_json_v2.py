@@ -560,6 +560,19 @@ def main():
         "Leave empty if not applicable.",
     )
     parser.add_argument(
+        "--mlflow-run-id",
+        default="",
+        help="MLflow run UUID (optional). When provided, the Filtered Data table "
+        "in the dashboard shows a clickable MLflow artifact link. "
+        "Example: c6aa48a0d312448380621e1bf00a8a5d",
+    )
+    parser.add_argument(
+        "--mlflow-experiment-id",
+        default="",
+        help="MLflow experiment ID (optional, used together with --mlflow-run-id). "
+        "Example: 264",
+    )
+    parser.add_argument(
         "--csv-file",
         default="new_benchmarks.csv",
         help="Path to the output CSV file (default: new_benchmarks.csv)",
@@ -593,6 +606,10 @@ def main():
     )
 
     if new_data_df is not None and not new_data_df.empty:
+        # Stamp MLflow identifiers on every row (empty string when not provided)
+        new_data_df["mlflow_run_id"] = args.mlflow_run_id
+        new_data_df["mlflow_experiment_id"] = args.mlflow_experiment_id
+
         if os.path.exists(args.csv_file):
             print(f"Appending {len(new_data_df)} new rows to {args.csv_file}...")
             existing_df = pd.read_csv(args.csv_file)
@@ -657,6 +674,8 @@ def main():
             "prefix_tokens",
             "prefix_count",
             "request_type",
+            "mlflow_run_id",
+            "mlflow_experiment_id",
         ]
 
         for col in fieldnames:
