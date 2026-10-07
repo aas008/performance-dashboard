@@ -46,6 +46,8 @@ python import_manual_runs_json_v2.py <json_file> \
 | `--dataset`          | No       | Real dataset name (for real-dataset runs)       | `mlperf-gpt-oss`, `sharegpt`            |
 | `--spec-decoding`    | No       | Speculative decoding method used                | `eagle3`, `ngram`                       |
 | `--prefix-caching`   | No       | Whether prefix caching was enabled              | `yes`, `no`                             |
+| `--mlflow-run-id`    | No       | MLflow run UUID — enables clickable MLflow links in dashboard | `c6aa48a0d312448380621e1bf00a8a5d` |
+| `--mlflow-experiment-id` | No  | MLflow experiment ID (used with `--mlflow-run-id`) | `264`                              |
 
 ## Examples
 
@@ -124,7 +126,7 @@ tail -n +2 my-benchmark.csv >> ../../../consolidated_dashboard.csv
 
 ## Output CSV Columns
 
-The script outputs 53 columns compatible with the performance dashboard:
+The script outputs 55 columns compatible with the performance dashboard:
 
 | #   | Column                    | Description                                          |
 | --- | ------------------------- | ---------------------------------------------------- |
@@ -181,6 +183,8 @@ The script outputs 53 columns compatible with the performance dashboard:
 | 51  | `prefix_tokens`           | Prefix token count (auto-detected from JSON)         |
 | 52  | `prefix_count`            | Prefix count (auto-detected from JSON)               |
 | 53  | `request_type`            | GuideLLM API endpoint type (auto-detected from JSON) |
+| 54  | `mlflow_run_id`           | MLflow run UUID (from `--mlflow-run-id`, empty if not provided) |
+| 55  | `mlflow_experiment_id`    | MLflow experiment ID (from `--mlflow-experiment-id`, empty if not provided) |
 
 ## Notes
 
