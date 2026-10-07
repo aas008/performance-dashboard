@@ -14,13 +14,32 @@ import pandas as pd
 
 
 def _percentile(values, p):
-    """Return the p-th percentile of a sorted list, or None if empty."""
+    """Return the p-th percentile of a pre-sorted list using linear interpolation.
+
+    Matches the implementation in Forge PR #215 _percentile().
+    """
     if not values:
         return None
-    values = sorted(values)
-    idx = (len(values) - 1) * p / 100
-    lo, hi = int(idx), min(int(idx) + 1, len(values) - 1)
-    return values[lo] + (values[hi] - values[lo]) * (idx - lo)
+    k = (len(values) - 1) * p / 100.0
+    f = int(k)
+    c = min(f + 1, len(values) - 1)
+    return values[f] + (k - f) * (values[c] - values[f])
+
+
+def _median(values):
+    """Return the median of a pre-sorted list. Matches Forge PR #215 _median()."""
+    n = len(values)
+    if not n:
+        return None
+    return values[n // 2] if n % 2 else (values[n // 2 - 1] + values[n // 2]) / 2
+
+
+def _mean(values):
+    return sum(values) / len(values) if values else None
+
+
+def _sorted_field(reqs, field):
+    return sorted(r[field] for r in reqs if r.get(field) is not None)
 
 
 def extract_per_turn_rows(benchmark, base_row):
@@ -56,14 +75,14 @@ def extract_per_turn_rows(benchmark, base_row):
             except (ValueError, TypeError):
                 pass
 
-    if not all_turns:
+    # Match Forge PR #215: skip extraction for single-turn runs
+    if len(all_turns) <= 1:
         return []
 
-    # Group successful requests by turn_index
+    # Group requests by turn_index
     by_turn = {}
     for req in successful:
-        info = req.get("info", {})
-        ti = info.get("turn_index")
+        ti = req.get("info", {}).get("turn_index")
         if ti is None:
             continue
         try:
@@ -72,11 +91,9 @@ def extract_per_turn_rows(benchmark, base_row):
             continue
         by_turn.setdefault(key, []).append(req)
 
-    # Group errored requests by turn_index for error counts
     err_by_turn = {}
     for req in errored:
-        info = req.get("info", {})
-        ti = info.get("turn_index")
+        ti = req.get("info", {}).get("turn_index")
         if ti is None:
             continue
         try:
@@ -90,43 +107,43 @@ def extract_per_turn_rows(benchmark, base_row):
         reqs = by_turn.get(turn_key, [])
         n_err = len(err_by_turn.get(turn_key, []))
 
-        ttfts = [r.get("time_to_first_token_ms") for r in reqs if r.get("time_to_first_token_ms") is not None]
-        itls = [r.get("inter_token_latency_ms") for r in reqs if r.get("inter_token_latency_ms") is not None]
-        tpots = [r.get("time_per_output_token_ms") for r in reqs if r.get("time_per_output_token_ms") is not None]
-        lats = [r.get("request_latency") for r in reqs if r.get("request_latency") is not None]
-        out_tps = [r.get("output_tokens_per_second") for r in reqs if r.get("output_tokens_per_second") is not None]
-        total_tps = [r.get("tokens_per_second") for r in reqs if r.get("tokens_per_second") is not None]
-        out_toks = [r.get("output_tokens") for r in reqs if r.get("output_tokens") is not None]
-        prompt_toks = [r.get("prompt_tokens") for r in reqs if r.get("prompt_tokens") is not None]
+        ttft = _sorted_field(reqs, "time_to_first_token_ms")
+        itl = _sorted_field(reqs, "inter_token_latency_ms")
+        tpot = _sorted_field(reqs, "time_per_output_token_ms")
+        lat = _sorted_field(reqs, "request_latency")
+        out_tps = _sorted_field(reqs, "output_tokens_per_second")
+        total_tps = _sorted_field(reqs, "tokens_per_second")
+        out_toks = _sorted_field(reqs, "output_tokens")
+        prompt_toks = _sorted_field(reqs, "prompt_tokens")
 
         row = dict(base_row)
         row["turn_index"] = int(turn_key)
         row["successful_requests"] = len(reqs)
         row["errored_requests"] = n_err
-        row["ttft_median"] = _percentile(ttfts, 50)
-        row["ttft_p95"] = _percentile(ttfts, 95)
-        row["ttft_p99"] = _percentile(ttfts, 99)
-        row["ttft_p1"] = _percentile(ttfts, 1)
-        row["ttft_p999"] = _percentile(ttfts, 99.9)
-        row["ttft_mean"] = (sum(ttfts) / len(ttfts)) if ttfts else None
-        row["itl_median"] = _percentile(itls, 50)
-        row["itl_p95"] = _percentile(itls, 95)
-        row["itl_p99"] = _percentile(itls, 99)
-        row["itl_p1"] = _percentile(itls, 1)
-        row["itl_p999"] = _percentile(itls, 99.9)
-        row["itl_mean"] = (sum(itls) / len(itls)) if itls else None
-        row["tpot_median"] = _percentile(tpots, 50)
-        row["tpot_p95"] = _percentile(tpots, 95)
-        row["tpot_p99"] = _percentile(tpots, 99)
-        row["tpot_p1"] = _percentile(tpots, 1)
-        row["tpot_p999"] = _percentile(tpots, 99.9)
-        row["request_latency_median"] = _percentile(lats, 50)
-        row["request_latency_min"] = min(lats) if lats else None
-        row["request_latency_max"] = max(lats) if lats else None
-        row["output_tok/sec"] = (sum(out_tps) / len(out_tps)) if out_tps else None
-        row["total_tok/sec"] = (sum(total_tps) / len(total_tps)) if total_tps else None
-        row["output_token_count_mean"] = (sum(out_toks) / len(out_toks)) if out_toks else None
-        row["prompt_token_count_mean"] = (sum(prompt_toks) / len(prompt_toks)) if prompt_toks else None
+        row["ttft_median"] = _median(ttft)
+        row["ttft_p95"] = _percentile(ttft, 95)
+        row["ttft_p99"] = _percentile(ttft, 99)
+        row["ttft_p1"] = _percentile(ttft, 1)
+        row["ttft_p999"] = _percentile(ttft, 99.9)
+        row["ttft_mean"] = _mean(ttft)
+        row["itl_median"] = _median(itl)
+        row["itl_p95"] = _percentile(itl, 95)
+        row["itl_p99"] = _percentile(itl, 99)
+        row["itl_p1"] = _percentile(itl, 1)
+        row["itl_p999"] = _percentile(itl, 99.9)
+        row["itl_mean"] = _mean(itl)
+        row["tpot_median"] = _median(tpot)
+        row["tpot_p95"] = _percentile(tpot, 95)
+        row["tpot_p99"] = _percentile(tpot, 99)
+        row["tpot_p1"] = _percentile(tpot, 1)
+        row["tpot_p999"] = _percentile(tpot, 99.9)
+        row["request_latency_median"] = _median(lat)
+        row["request_latency_min"] = min(lat) if lat else None
+        row["request_latency_max"] = max(lat) if lat else None
+        row["output_tok/sec"] = _mean(out_tps)
+        row["total_tok/sec"] = _mean(total_tps)
+        row["output_token_count_mean"] = _mean(out_toks)
+        row["prompt_token_count_mean"] = _mean(prompt_toks)
         per_turn_rows.append(row)
 
     return per_turn_rows
