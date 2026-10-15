@@ -1644,7 +1644,7 @@ def load_rhaiis_data(file_path: str = "consolidated_dashboard.csv") -> pd.DataFr
         # from multi-turn benchmarks would double-count runs in comparisons.
         # Mirrors the aggregate-row filter in dashboard.py.
         if "turn_index" in df.columns:
-            _ti = df["turn_index"].astype(str).str.strip()
+            _ti = df["turn_index"].astype(str).str.strip()  # type: ignore[misc]
             df = df[df["turn_index"].isna() | (_ti == "") | (_ti == "nan")].copy()
 
         # Assign profile based on prompt/output tokens (same as llmd_data)
