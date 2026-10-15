@@ -114,7 +114,7 @@ python import_manual_runs_json_v2.py \
   --csv-file "gemma-multiturn.csv"
 ```
 
-> **Note:** `turns`, `prefix_tokens`, `prefix_count`, and `request_type` are auto-detected from the guidellm JSON. For multi-turn benchmarks, the script emits one aggregate row per concurrency level (`turn_index` = empty) **plus** one per-turn row per turn per concurrency level (`turn_index` = 0, 1, 2, …) when `requests.successful` contains `turn_index` data. Non-multi-turn benchmarks emit aggregate rows only.
+> **Note:** `turns`, `prefix_tokens`, `prefix_count`, and `request_type` are auto-detected from the guidellm JSON. For multi-turn benchmarks, the script emits one aggregate row per concurrency level (`turn_index` = empty) **plus** one per-turn row per turn per concurrency level (`turn_index` = 0, 1, 2, …) when `requests.successful`/`requests.errored` contain at least two distinct valid `turn_index` values. Other benchmarks emit aggregate rows only.
 
 ## Appending to Consolidated Dashboard
 

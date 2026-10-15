@@ -7,6 +7,7 @@ Updated for guidellm 0.5.x JSON structure changes.
 """
 
 import argparse
+import contextlib
 import json
 import os
 
@@ -70,10 +71,8 @@ def extract_per_turn_rows(benchmark, base_row):
         info = req.get("info", {})
         ti = info.get("turn_index")
         if ti is not None:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 all_turns.add(str(int(float(ti))))
-            except (ValueError, TypeError):
-                pass
 
     # Match Forge PR #215: skip extraction for single-turn runs
     if len(all_turns) <= 1:
@@ -144,6 +143,9 @@ def extract_per_turn_rows(benchmark, base_row):
         row["total_tok/sec"] = _mean(total_tps)
         row["output_token_count_mean"] = _mean(out_toks)
         row["prompt_token_count_mean"] = _mean(prompt_toks)
+        row["output_token_count_p99"] = _percentile(out_toks, 99)
+        row["prompt_token_count_p99"] = _percentile(prompt_toks, 99)
+        row["measured rps"] = None
         per_turn_rows.append(row)
 
     return per_turn_rows
