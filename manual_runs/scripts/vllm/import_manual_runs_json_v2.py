@@ -28,7 +28,10 @@ def _percentile(values, p):
 
 
 def _median(values):
-    """Return the median of a pre-sorted list. Matches Forge PR #215 _median()."""
+    """Return the median of a pre-sorted list.
+
+    Matches the Forge PR #215 implementation.
+    """
     n = len(values)
     if not n:
         return None
@@ -58,9 +61,11 @@ def extract_per_turn_rows(benchmark, base_row):
     Returns:
         list[dict]: Per-turn row dicts ready to append to all_run_data.
     """
-    requests = benchmark.get("requests", {})
-    successful = requests.get("successful", [])
-    errored = requests.get("errored", [])
+    # Named requests_data (not requests) so bandit does not mistake the dict
+    # for the requests library (B113).
+    requests_data = benchmark.get("requests", {})
+    successful = requests_data.get("successful", [])
+    errored = requests_data.get("errored", [])
 
     if not successful and not errored:
         return []
