@@ -49,9 +49,13 @@ def _sorted_field(reqs, field):
 def extract_per_turn_rows(benchmark, base_row):
     """Extract per-turn breakdown rows from request-level data in a benchmark section.
 
-    For each turn_index found in requests.successful, computes per-turn stats
-    (TTFT, ITL, TPOT, latency, throughput) and returns one row dict per turn.
-    Returns an empty list if no turn_index data is present.
+    For each turn_index found in requests.successful/requests.errored, computes
+    per-turn stats (TTFT, ITL, TPOT, latency, throughput) and returns one row
+    dict per turn. Throughput columns carry the turn's aggregate rate over the
+    benchmark's measurement interval (the turn's tokens divided by the
+    scheduler start-to-end duration), matching the GuideLLM "total" throughput
+    reported on the aggregate row. Returns an empty list when fewer than two
+    distinct valid turn indices are present.
 
     Args:
         benchmark: A single benchmark dict from the guidellm JSON.
@@ -69,6 +73,15 @@ def extract_per_turn_rows(benchmark, base_row):
 
     if not successful and not errored:
         return []
+
+    # Measurement interval for per-turn throughput: the same scheduler window
+    # GuideLLM uses for its run-level "total" throughput distributions.
+    scheduler_metrics = benchmark.get("scheduler_metrics", {})
+    start_time = scheduler_metrics.get("start_time")
+    end_time = scheduler_metrics.get("end_time")
+    duration = None
+    if start_time is not None and end_time is not None and end_time > start_time:
+        duration = end_time - start_time
 
     # Discover all turn indices from both buckets
     all_turns = set()
@@ -115,8 +128,6 @@ def extract_per_turn_rows(benchmark, base_row):
         itl = _sorted_field(reqs, "inter_token_latency_ms")
         tpot = _sorted_field(reqs, "time_per_output_token_ms")
         lat = _sorted_field(reqs, "request_latency")
-        out_tps = _sorted_field(reqs, "output_tokens_per_second")
-        total_tps = _sorted_field(reqs, "tokens_per_second")
         out_toks = _sorted_field(reqs, "output_tokens")
         prompt_toks = _sorted_field(reqs, "prompt_tokens")
 
@@ -144,8 +155,15 @@ def extract_per_turn_rows(benchmark, base_row):
         row["request_latency_median"] = _median(lat)
         row["request_latency_min"] = min(lat) if lat else None
         row["request_latency_max"] = max(lat) if lat else None
-        row["output_tok/sec"] = _mean(out_tps)
-        row["total_tok/sec"] = _mean(total_tps)
+        # Throughput on per-turn rows is the turn's aggregate rate over the
+        # measurement interval (turn tokens / run duration), matching the
+        # GuideLLM "total" throughput on the aggregate row. The mean of
+        # per-request rates would report a single request's rate and understate
+        # concurrent load by roughly the concurrency factor.
+        row["output_tok/sec"] = sum(out_toks) / duration if duration else None
+        row["total_tok/sec"] = (
+            (sum(out_toks) + sum(prompt_toks)) / duration if duration else None
+        )
         row["output_token_count_mean"] = _mean(out_toks)
         row["prompt_token_count_mean"] = _mean(prompt_toks)
         row["output_token_count_p99"] = _percentile(out_toks, 99)
