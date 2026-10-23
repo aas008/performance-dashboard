@@ -44,8 +44,9 @@ GRAFANA_DASHBOARDS = {
         "extra_params": "&var-cluster_name=psap-de-h200-cluster",
     },
     "B200_PIRATE": {
-        "dashboard_id": "b200-pirate-vllm-dcgm",
-        "dashboard_name": "vllm-2b-dcgm-metrics-b200-pirate",
+        "dashboard_id": "df28i54z7okcgf",
+        "dashboard_name": "vllm-2b-dcgm-complete-metrics-combined",
+        "extra_params": "&var-cluster_name=psap-b200-nm",
     },
 }
 
