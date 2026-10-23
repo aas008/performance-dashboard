@@ -451,8 +451,9 @@ def parse_guidellm_json(
 
     # Get global data config (prompt_tokens, output_tokens)
     global_args = data.get("args", {})
-    global_data_config = global_args.get("data", [])
-    backend_kwargs = global_args.get("backend_kwargs", {})
+    global_data_config = global_args.get("data") or []
+    # Older guidellm JSONs can carry an explicit null backend_kwargs
+    backend_kwargs = global_args.get("backend_kwargs") or {}
     request_type = backend_kwargs.get("request_format", "")
 
     # Extract aggregated guidellm start and end times from scheduler_metrics
