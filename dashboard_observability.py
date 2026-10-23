@@ -55,12 +55,22 @@ _SGLANG_H200_DASHBOARD = {
     "dashboard_name": "sglang-2b-dcgm-metrics-psap-rhaiis-h200",
     "extra_params": "&var-cluster_name=$__all&var-model_name=$__all",
 }
+_SGLANG_ATHENA_DASHBOARD = {
+    "dashboard_id": "sglang-dcgm-metrics-psap-rhaiis-h200",
+    "dashboard_name": "sglang-2b-dcgm-metrics-psap-rhaiis-h200",
+    "extra_params": "&var-cluster_name=psap-fire-athena&var-model_name=$__all",
+}
+_SGLANG_JANUS_DASHBOARD = {
+    "dashboard_id": "sglang-dcgm-metrics-psap-rhaiis-h200",
+    "dashboard_name": "sglang-2b-dcgm-metrics-psap-rhaiis-h200",
+    "extra_params": "&var-cluster_name=psap-de-h200-cluster&var-model_name=$__all",
+}
 SGLANG_GRAFANA_DASHBOARDS = {
     "H200": _SGLANG_H200_DASHBOARD,
     "H200_HERA2": _SGLANG_H200_DASHBOARD,
     "H200_ZEUS2": _SGLANG_H200_DASHBOARD,
-    "H200_ATHENA": _SGLANG_H200_DASHBOARD,
-    "H200_JANUS": _SGLANG_H200_DASHBOARD,
+    "H200_ATHENA": _SGLANG_ATHENA_DASHBOARD,
+    "H200_JANUS": _SGLANG_JANUS_DASHBOARD,
 }
 
 # Jan 1, 2026 00:00:00 UTC in milliseconds.
