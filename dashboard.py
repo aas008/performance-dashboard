@@ -54,7 +54,7 @@ from dashboard_taxonomy import (
     sync_selected_options,
     taxonomy_query_params,
     uses_legacy_methodology,
-    version_label_pair_mask,
+    version_label_additive_mask,
 )
 from intelliconfig import render_intelliconfig_section
 
@@ -13337,13 +13337,13 @@ def main():
                     {label for _, label in selected_version_label_pairs}
                 )
 
-            run_temp = (
-                label_temp[
-                    version_label_pair_mask(label_temp, selected_version_label_pairs)
-                ]
-                if selected_version_label_pairs
-                else label_temp[label_temp["label"].eq(DEFAULT_LABEL)]
-            )
+            run_temp = label_temp[
+                version_label_additive_mask(
+                    label_temp,
+                    selected_version_label_pairs,
+                    selected_versions,
+                )
+            ]
             uuids = (
                 sorted(run_temp.loc[run_temp["uuid"] != "", "uuid"].unique().tolist())
                 if not run_temp.empty
@@ -13365,12 +13365,11 @@ def main():
                 temp_df = temp_df[temp_df["accelerator"].isin(selected_accelerators)]
             if selected_versions:
                 temp_df = temp_df[temp_df["version"].isin(selected_versions)]
-            if selected_version_label_pairs:
-                temp_df = temp_df[
-                    version_label_pair_mask(temp_df, selected_version_label_pairs)
-                ]
-            else:
-                temp_df = temp_df[temp_df["label"].eq(DEFAULT_LABEL)]
+            temp_df = temp_df[
+                version_label_additive_mask(
+                    temp_df, selected_version_label_pairs, selected_versions
+                )
+            ]
             if selected_uuids:
                 temp_df = temp_df[temp_df["uuid"].isin(selected_uuids)]
 
@@ -13479,12 +13478,11 @@ def main():
                 temp_df = temp_df[temp_df["accelerator"].isin(selected_accelerators)]
             if selected_versions:
                 temp_df = temp_df[temp_df["version"].isin(selected_versions)]
-            if selected_version_label_pairs:
-                temp_df = temp_df[
-                    version_label_pair_mask(temp_df, selected_version_label_pairs)
-                ]
-            else:
-                temp_df = temp_df[temp_df["label"].eq(DEFAULT_LABEL)]
+            temp_df = temp_df[
+                version_label_additive_mask(
+                    temp_df, selected_version_label_pairs, selected_versions
+                )
+            ]
             if selected_uuids:
                 temp_df = temp_df[temp_df["uuid"].isin(selected_uuids)]
             if selected_profiles:
@@ -13797,10 +13795,8 @@ def main():
                 if selected_mt_prefix_count is not None
                 else True
             )
-            _label = (
-                version_label_pair_mask(d, selected_version_label_pairs)
-                if selected_version_label_pairs
-                else d["label"].eq(DEFAULT_LABEL)
+            _label = version_label_additive_mask(
+                d, selected_version_label_pairs, selected_versions
             )
             _uuid = d["uuid"].isin(selected_uuids) if selected_uuids else True
             return d[

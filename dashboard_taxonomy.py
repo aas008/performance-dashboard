@@ -244,6 +244,38 @@ def version_label_pair_mask(df, pairs):
     return pd.Series(pair_index.isin(set(pairs)), index=df.index)
 
 
+def version_label_additive_mask(df, pairs, selected_versions):
+    """Return a mask that applies label filtering additively per version.
+
+    When a user selects several versions and then picks label pairs for
+    only *some* of them, this mask keeps:
+    - rows matching an explicit (version, label) pair, AND
+    - default-label rows for versions that have no pair selected.
+
+    This prevents label selections for one version from silently dropping
+    other selected versions (GitHub issue #121).
+    """
+    if not pairs:
+        return df["label"].eq(DEFAULT_LABEL)
+    if not {"version", "label"}.issubset(df.columns):
+        return pd.Series(False, index=df.index)
+
+    # Versions that have at least one explicit label pair selected
+    versions_with_label_selection = {ver for ver, _lbl in pairs}
+
+    # Mask 1: rows matching an explicit (version, label) pair
+    pair_index = pd.MultiIndex.from_frame(df[["version", "label"]].astype(str))
+    explicit_match = pd.Series(pair_index.isin(set(pairs)), index=df.index)
+
+    # Mask 2: default-label rows for versions *without* any label selection
+    versions_without_label = set(selected_versions) - versions_with_label_selection
+    default_for_unlabeled = df["version"].isin(versions_without_label) & df["label"].eq(
+        DEFAULT_LABEL
+    )
+
+    return explicit_match | default_for_unlabeled
+
+
 def parse_filter_values(raw_value, available_values):
     """Parse a comma-separated URL filter and discard stale values."""
     if not raw_value:
