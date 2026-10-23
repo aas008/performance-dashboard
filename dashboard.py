@@ -13617,7 +13617,10 @@ def main():
                 language=None,
             )
             st.caption(
-                "Selecting a release shows its unlabeled runs. Turn on the optional label filter to add labeled runs."
+                "Selecting a release shows its unlabeled runs. "
+                "Turn on the optional label filter to pick specific labels; "
+                "selecting a label shows only that label's runs for the release. "
+                "To also keep unlabeled runs, select the release's base entry."
             )
             st.markdown("### Valid filter combinations")
             st.markdown("View the available combinations of filters:")
