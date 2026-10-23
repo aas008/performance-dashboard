@@ -4680,8 +4680,8 @@ def render_performance_plots_section(filtered_df, per_turn_df=None, use_expander
                 )
 
         # Push all perf-plots URL params directly — fragment reruns don't trigger
-        # the parent encode_filters_to_url / from_dict, so widgets changed inside
-        # the fragment would otherwise leave the URL stale.
+        # the parent URL sync in main(), so widgets changed inside the fragment
+        # would otherwise leave the URL stale.
         # Suppress only Streamlit API errors (e.g. no session context outside a run);
         # let TypeError/AttributeError from bad values surface for debugging.
         try:
@@ -11977,47 +11977,6 @@ def main():
             },
         }
 
-        def encode_filters_to_url(
-            accelerators,
-            models,
-            versions,
-            profile,
-            tp_sizes,
-            labels=None,
-            uuids=None,
-        ):
-            """Encode filter and active-section state to URL parameters."""
-            url_params = {}
-
-            if accelerators:
-                url_params["accelerators"] = ",".join(accelerators)
-            if models:
-                url_params["models"] = ",".join(models)
-            if versions:
-                url_params["versions"] = ",".join(versions)
-            url_params.update(taxonomy_query_params(labels, uuids))
-            if profile:
-                url_params["profile"] = profile
-            if tp_sizes:
-                url_params["tp_sizes"] = ",".join(map(str, tp_sizes))
-
-            # Also push active section's widget state so the bare URL bar is shareable
-            active_slug = SECTION_TO_SLUG.get(
-                st.session_state.get("active_section", ""), ""
-            )
-            if active_slug:
-                url_params["section"] = active_slug
-                for url_key, ss_key in SECTION_FILTER_KEYS.get(active_slug, {}).items():
-                    val = st.session_state.get(ss_key)
-                    if val is not None:
-                        url_params[url_key] = (
-                            ",".join(map(str, val))
-                            if isinstance(val, list)
-                            else str(val)
-                        )
-
-            st.query_params.update(url_params)
-
         def build_share_url():
             """Build a full shareable URL including section and section-specific filters."""
             import urllib.parse
@@ -13410,6 +13369,17 @@ def main():
                 sorted(temp_df["model"].unique().tolist()) if not temp_df.empty else []
             )
 
+            # Detect models revealed by upstream filter changes (e.g. a newly
+            # selected label pair) so they can join the current selection.
+            avail_models_key = "previous_available_models"
+            prev_available_models = st.session_state.get(avail_models_key, None)
+            newly_available_models = (
+                [m for m in models if m not in prev_available_models]
+                if prev_available_models is not None
+                else []
+            )
+            st.session_state[avail_models_key] = models
+
             if st.session_state.get("clear_all_filters", False) or st.session_state.get(
                 "filters_were_cleared", False
             ):
@@ -13442,6 +13412,13 @@ def main():
                 preserved_selections = models
             elif prev_selected is not None:
                 preserved_selections = [m for m in prev_selected if m in models]
+                if newly_available_models:
+                    # Auto-select models revealed by upstream filter changes so
+                    # explicitly selected label pairs stay visible.
+                    preserved_selections += [
+                        m for m in newly_available_models if m not in preserved_selections
+                    ]
+                    st.session_state[prev_models_key] = preserved_selections
             else:
                 persisted = st.session_state.get("_persisted_models", None)
                 if persisted is not None:
