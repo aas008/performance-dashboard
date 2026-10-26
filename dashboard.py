@@ -290,8 +290,8 @@ OVERVIEW_RELEASE_PAIRS = [
     },
 ]
 
-# ±3 % dead-zone: changes within this range are "neutral" (neither win nor loss)
-NEUTRAL_THRESHOLD_PCT = 2.0
+# ±5 % dead-zone: changes within this range are "neutral" (neither win nor loss)
+NEUTRAL_THRESHOLD_PCT = 5.0
 
 ACCELERATOR_DISPLAY_NAMES = {
     "H200": "NVIDIA H200",
@@ -553,7 +553,13 @@ def compare_two_datasets(data_a, data_b, metric_config, user_conc_set):
     pct_diff = ((a_val - b_val) / b_val) * 100
     a_better = pct_diff > 0 if higher_is_better else pct_diff < 0
 
-    return pct_diff, a_better, a_peak_conc, b_peak_conc, abs(pct_diff) < 5
+    return (
+        pct_diff,
+        a_better,
+        a_peak_conc,
+        b_peak_conc,
+        abs(pct_diff) < NEUTRAL_THRESHOLD_PCT,
+    )
 
 
 def _resolve_baseline_df(h200_df, baseline, fallback_version, profile_full):
@@ -996,7 +1002,7 @@ def _compute_overview_data(
         for r in combo_results
         if r.get("Throughput_pct") is not None
         and not r.get("Throughput_better")
-        and abs(r.get("Throughput_pct", 0)) > NEUTRAL_THRESHOLD_PCT
+        and not r.get("Throughput_similar")
     )
     win_rate = ((total_cmp - losses) / total_cmp * 100) if total_cmp > 0 else 100.0
 
@@ -1030,21 +1036,19 @@ def _compute_overview_data(
     win_combos = [
         r
         for r in combo_results
-        if r.get("Throughput_better") is True
-        and abs(r.get("Throughput_pct", 0)) > NEUTRAL_THRESHOLD_PCT
+        if r.get("Throughput_better") is True and not r.get("Throughput_similar")
     ]
     loss_combos = [
         r
         for r in combo_results
         if r.get("Throughput_pct") is not None
         and not r.get("Throughput_better")
-        and abs(r.get("Throughput_pct", 0)) > NEUTRAL_THRESHOLD_PCT
+        and not r.get("Throughput_similar")
     ]
     neutral_combos = [
         r
         for r in combo_results
-        if r.get("Throughput_pct") is not None
-        and abs(r.get("Throughput_pct", 0)) <= NEUTRAL_THRESHOLD_PCT
+        if r.get("Throughput_pct") is not None and r.get("Throughput_similar")
     ]
 
     # --- Per-accelerator rollup ---
@@ -1059,7 +1063,7 @@ def _compute_overview_data(
             for r in ar
             if r.get("Throughput_pct") is not None
             and not r.get("Throughput_better")
-            and abs(r.get("Throughput_pct", 0)) > NEUTRAL_THRESHOLD_PCT
+            and not r.get("Throughput_similar")
         )
         awr = ((at - al) / at * 100) if at > 0 else 100.0
 
@@ -1100,7 +1104,7 @@ def _compute_overview_data(
             for r in results
             if r.get("Throughput_pct") is not None
             and not r.get("Throughput_better")
-            and abs(r.get("Throughput_pct", 0)) > NEUTRAL_THRESHOLD_PCT
+            and not r.get("Throughput_similar")
         )
         fwr = ((ft - fl) / ft * 100) if ft > 0 else 100.0
 
@@ -1265,9 +1269,9 @@ def _hm_cell(pct, higher_is_better):
     norm = pct if higher_is_better else -pct
     sign = "+" if pct > 0 else ""
     label = f"{sign}{pct:.1f} %"
-    if norm > 5:
+    if norm > NEUTRAL_THRESHOLD_PCT:
         cls = "hm-improve-strong"
-    elif norm >= -5:
+    elif norm >= -NEUTRAL_THRESHOLD_PCT:
         cls = "hm-similar"
     else:
         cls = "hm-regress-strong"
@@ -1528,7 +1532,7 @@ def _render_ca_scorecard(score_placeholder, group_scores):
 </summary>
 <hr style="margin:0.6rem 0;border:none;border-top:1px solid rgba(0,0,0,0.1);">
 {competitor_rows}
-<div style="margin-top:0.6rem;font-size:0.8rem;opacity:0.7;">🟢 {bl} wins majority of metrics &nbsp;|&nbsp; 🔴 {bl} loses majority of metrics &nbsp;|&nbsp; 🟡 Similar (tied or &lt;5% diff)</div>
+<div style="margin-top:0.6rem;font-size:0.8rem;opacity:0.7;">🟢 {bl} wins majority of metrics &nbsp;|&nbsp; 🔴 {bl} loses majority of metrics &nbsp;|&nbsp; 🟡 Similar (tied or &lt;{NEUTRAL_THRESHOLD_PCT:.0f}% diff)</div>
 </details>
 </div>""",
                     unsafe_allow_html=True,
@@ -1872,8 +1876,8 @@ def render_competitive_analysis_section(df):
     st.markdown(selected_ca["description"])
     st.caption(
         "Each comparison below shows a per-model summary: "
-        "a model is a **Win** if it has more metric wins than losses (baseline outperforms by ≥5%), "
-        "a **Loss** if it has more metric losses than wins (baseline underperforms by ≥5%), "
+        f"a model is a **Win** if it has more metric wins than losses (baseline outperforms by ≥{NEUTRAL_THRESHOLD_PCT:.0f}%), "
+        f"a **Loss** if it has more metric losses than wins (baseline underperforms by ≥{NEUTRAL_THRESHOLD_PCT:.0f}%), "
         "and **Similar** otherwise. "
         "Metrics evaluated: Output Throughput, Total Throughput, End-to-End Latency, TTFT P95, and ITL P95 geometric means."
     )
@@ -2565,7 +2569,7 @@ def render_competitive_analysis_section(df):
                                     f"**Legend:** "
                                     f"🟢 {baseline} performs better than {competitor} | "
                                     f"🔴 {baseline} performs worse than {competitor} | "
-                                    f"🟡 Similar Performance (< 5% difference)"
+                                    f"🟡 Similar Performance (< {NEUTRAL_THRESHOLD_PCT:.0f}% difference)"
                                 )
 
             _render_ca_scorecard(score_placeholder, group_scores)
@@ -2652,7 +2656,7 @@ combinations.<br><br>
     # Worst Regression
     with c2:
         wr_val = data["worst_regression"]
-        if wr_val < -5:
+        if wr_val < -NEUTRAL_THRESHOLD_PCT:
             wr_cls = "val-red"
         elif wr_val < 0:
             wr_cls = "val-amber"
@@ -2797,7 +2801,7 @@ Changes within ±{NEUTRAL_THRESHOLD_PCT:.0f} % are not counted as losses.<br><br
             f"{ov_current} builds on vLLM {_vllm_ver} — the goal is matching or exceeding upstream "
             f"performance. Comparisons are shown separately for {_parity_accelerator_names} "
             "when matching benchmark configurations are available. "
-            '"At parity" means within 5 %.'
+            f'"At parity" means within {NEUTRAL_THRESHOLD_PCT:.0f} %.'
         )
         available_vllm_accels = [
             accelerator
@@ -3180,7 +3184,7 @@ Per-model delta (geometric mean, {_accel_display(parity_accel)}):
 <tbody>{vllm_table_rows}</tbody>
 </table>
 <br>
-🟢 Ahead (&gt; 5 % better) · 🟡 At Parity (within ± 5 %) · 🔴 Behind (&gt; 5 % worse)<br>
+🟢 Ahead (&gt; {NEUTRAL_THRESHOLD_PCT:.0f} % better) · 🟡 At Parity (within ± {NEUTRAL_THRESHOLD_PCT:.0f} %) · 🔴 Behind (&gt; {NEUTRAL_THRESHOLD_PCT:.0f} % worse)<br>
 <i>For latency metrics (TTFT/ITL), lower is better — a negative Δ means RHAIIS is faster.</i>
 </div>""",
                         unsafe_allow_html=True,
@@ -3271,9 +3275,9 @@ Per-model delta (geometric mean, {_accel_display(parity_accel)}):
                     if pct is None:
                         continue
                     icon = (
-                        "🟢"
-                        if pct > NEUTRAL_THRESHOLD_PCT
-                        else ("🟡" if pct >= -NEUTRAL_THRESHOLD_PCT else "🔴")
+                        "🟡"
+                        if r.get("Throughput_similar")
+                        else ("🟢" if pct > 0 else "🔴")
                     )
                     prof = _display_profile(r["profile"], r.get("custom_isl_osl", ""))
                     detail_lines += (
@@ -3373,9 +3377,7 @@ Per-model delta (geometric mean, {_accel_display(parity_accel)}):
                 if pct is None:
                     continue
                 icon = (
-                    "🟢"
-                    if pct > NEUTRAL_THRESHOLD_PCT
-                    else ("🟡" if pct >= -NEUTRAL_THRESHOLD_PCT else "🔴")
+                    "🟡" if r.get("Throughput_similar") else ("🟢" if pct > 0 else "🔴")
                 )
                 prof = _display_profile(r["profile"], r.get("custom_isl_osl", ""))
                 detail_lines += (
@@ -3416,9 +3418,9 @@ Per-model delta (geometric mean, {_accel_display(parity_accel)}):
         '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap">'
         '<div><h3 style="margin:0">Regression Heatmap</h3></div>'
         '<div style="font-size:0.8rem;color:#6b7280">'
-        '<span class="hm-cell hm-improve-strong" style="font-size:0.75rem">■ Improvement (&gt;5 %)</span> &nbsp; '
-        '<span class="hm-cell hm-similar" style="font-size:0.75rem">■ Similar (±5 %)</span> &nbsp; '
-        '<span class="hm-cell hm-regress-strong" style="font-size:0.75rem">■ Regression (&gt;5 %)</span>'
+        f'<span class="hm-cell hm-improve-strong" style="font-size:0.75rem">■ Improvement (&gt;{NEUTRAL_THRESHOLD_PCT:.0f} %)</span> &nbsp; '
+        f'<span class="hm-cell hm-similar" style="font-size:0.75rem">■ Similar (±{NEUTRAL_THRESHOLD_PCT:.0f} %)</span> &nbsp; '
+        f'<span class="hm-cell hm-regress-strong" style="font-size:0.75rem">■ Regression (&gt;{NEUTRAL_THRESHOLD_PCT:.0f} %)</span>'
         "</div></div>",
         unsafe_allow_html=True,
     )
@@ -6909,7 +6911,7 @@ def render_compare_versions_summary_section(df, use_expander=True):
             )
         with popover_col:
             with st.popover("ℹ️ How are these calculated?"):
-                st.markdown("""
+                st.markdown(f"""
                 **Mean Change Calculation:**
                 - Calculated by taking the percentage change at each common concurrency level, then taking the arithmetic mean (average) of all those changes
                 - Shows the average performance difference across all concurrency levels
@@ -6972,9 +6974,9 @@ def render_compare_versions_summary_section(df, use_expander=True):
 
                 **Status Classification:**
                 The status emoji is determined by consensus across all four metrics (Mean, Median, Geometric Mean, and Peak change):
-                - 🟢 **Better**: At least 3 out of 4 metrics show ≥5% improvement
-                - 🟡 **Similar**: Mixed signals (some metrics up, some down) or all metrics show <5% difference
-                - 🔴 **Worse**: At least 3 out of 4 metrics show ≥5% decline
+                - 🟢 **Better**: At least 3 out of 4 metrics show ≥{NEUTRAL_THRESHOLD_PCT:.0f}% improvement
+                - 🟡 **Similar**: Mixed signals (some metrics up, some down) or all metrics show <{NEUTRAL_THRESHOLD_PCT:.0f}% difference
+                - 🔴 **Worse**: At least 3 out of 4 metrics show ≥{NEUTRAL_THRESHOLD_PCT:.0f}% decline
 
                 This consensus approach provides a more robust assessment by requiring multiple metrics to agree before declaring a clear winner or loser.
 
@@ -7498,7 +7500,7 @@ def render_compare_versions_summary_section(df, use_expander=True):
                 f"**Legend:** "
                 f"🟢 {version_1_display} performs better than {version_2_display} | "
                 f"🔴 {version_1_display} performs worse than {version_2_display} | "
-                f"🟡 Similar Performance (< 5% difference)"
+                f"🟡 Similar Performance (< {NEUTRAL_THRESHOLD_PCT:.0f}% difference)"
             )
 
             # Show only source rows represented by the model/config pairs in the
@@ -7836,7 +7838,7 @@ def render_compare_configurations_section(
             st.markdown(f"### Comparing: {config_1_short} vs {config_2_short}")
         with popover_col:
             with st.popover("ℹ️ How are these calculated?"):
-                st.markdown("""
+                st.markdown(f"""
                 **Geometric Mean Change Calculation:**
 
                 *Step 1: Convert % changes to Growth Factors*
@@ -7866,7 +7868,7 @@ def render_compare_configurations_section(
                 | **Throughput** | M1 is X% faster | M1 is X% slower |
                 | **Latency** | M1 is X% slower | M1 is X% faster |
 
-                **Status:** 🟢 Better (>=5% improvement) | 🟡 Similar (<5%) | 🔴 Worse (>=5% decline)
+                **Status:** 🟢 Better (>={NEUTRAL_THRESHOLD_PCT:.0f}% improvement) | 🟡 Similar (<{NEUTRAL_THRESHOLD_PCT:.0f}%) | 🔴 Worse (>={NEUTRAL_THRESHOLD_PCT:.0f}% decline)
                     """)
 
         st.markdown(f"**Comparing:** {config_1_short} vs {config_2_short}")
@@ -8253,7 +8255,7 @@ def render_compare_configurations_section(
                 f"**Legend:** "
                 f"🟢 {config_1_short} performs better than {config_2_short} | "
                 f"🔴 {config_1_short} performs worse than {config_2_short} | "
-                f"🟡 Similar Performance (< 5% difference)"
+                f"🟡 Similar Performance (< {NEUTRAL_THRESHOLD_PCT:.0f}% difference)"
             )
 
             # Detailed version+TP comparison sections
@@ -8330,16 +8332,16 @@ def render_compare_configurations_section(
                     pct_diff = ((m1_val - m2_val) / m2_val) * 100
 
                     if higher_is_better:
-                        if pct_diff > 5:
+                        if pct_diff > NEUTRAL_THRESHOLD_PCT:
                             return f"{config_1_short} has +{abs(pct_diff):.1f}% higher {metric_name}"
-                        elif pct_diff < -5:
+                        elif pct_diff < -NEUTRAL_THRESHOLD_PCT:
                             return f"{config_2_short} has +{abs(pct_diff):.1f}% higher {metric_name}"
                         else:
                             return f"Similar (~{abs(pct_diff):.1f}% difference)"
                     else:
-                        if pct_diff < -5:
+                        if pct_diff < -NEUTRAL_THRESHOLD_PCT:
                             return f"{config_1_short} has {abs(pct_diff):.1f}% lower {metric_name}"
-                        elif pct_diff > 5:
+                        elif pct_diff > NEUTRAL_THRESHOLD_PCT:
                             return f"{config_2_short} has {abs(pct_diff):.1f}% lower {metric_name}"
                         else:
                             return f"Similar (~{abs(pct_diff):.1f}% difference)"
