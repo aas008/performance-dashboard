@@ -52,6 +52,10 @@ AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
 # ── Overview version configuration ────────────────────────────────
 LLMD_NEUTRAL_THRESHOLD_PCT = 5.0
 
+# E2E latency absolute dead-zone: changes of 1 s or less are neutral even if >5 %.
+# request_latency_median is measured in seconds.
+LLMD_E2E_ABS_TOLERANCE_S = 1.0
+
 LLMD_OVERVIEW_RELEASE_PAIRS = [
     {
         "label": "RHOAI 3.4 vs 3.3",
@@ -142,19 +146,23 @@ def _llmd_display_profile(profile, custom_isl_osl=""):
     return str(profile)
 
 
-def _llmd_hm_cell(pct, higher_is_better):
+def _llmd_hm_cell(pct, higher_is_better, similar=None):
     """Return styled heatmap cell HTML for a % delta."""
     if pct is None:
         return '<span class="hm-cell hm-neutral">N/A</span>'
     norm = pct if higher_is_better else -pct
     sign = "+" if pct > 0 else ""
     label = f"{sign}{pct:.1f} %"
-    if norm > LLMD_NEUTRAL_THRESHOLD_PCT:
-        cls = "hm-improve-strong"
-    elif norm >= -LLMD_NEUTRAL_THRESHOLD_PCT:
+    if similar is None:
+        similar = abs(norm) < LLMD_NEUTRAL_THRESHOLD_PCT
+    if similar:
         cls = "hm-similar"
-    else:
+    elif norm > LLMD_NEUTRAL_THRESHOLD_PCT:
+        cls = "hm-improve-strong"
+    elif norm < -LLMD_NEUTRAL_THRESHOLD_PCT:
         cls = "hm-regress-strong"
+    else:
+        cls = "hm-similar"
     return f'<span class="hm-cell {cls}">{label}</span>'
 
 
@@ -263,13 +271,18 @@ def _compare_two_datasets(data_a, data_b, metric_config, user_conc_set):
 
     pct_diff = ((a_val - b_val) / b_val) * 100
     a_better = pct_diff > 0 if higher_is_better else pct_diff < 0
+    abs_diff = a_val - b_val
+
+    is_similar = abs(pct_diff) < LLMD_NEUTRAL_THRESHOLD_PCT
+    if column == "request_latency_median":
+        is_similar = is_similar or abs(abs_diff) <= LLMD_E2E_ABS_TOLERANCE_S
 
     return (
         pct_diff,
         a_better,
         a_peak_conc,
         b_peak_conc,
-        abs(pct_diff) < LLMD_NEUTRAL_THRESHOLD_PCT,
+        is_similar,
     )
 
 
@@ -2376,7 +2389,7 @@ def render_compare_versions_section(df, use_expander=True):
 | **Throughput** | V1 is faster | V1 is slower |
 | **Latency** | V1 is slower | V1 is faster |
 
-**Status:** 🟢 Better (>={LLMD_NEUTRAL_THRESHOLD_PCT:.0f}%) | 🟡 Similar (<{LLMD_NEUTRAL_THRESHOLD_PCT:.0f}%) | 🔴 Worse (>={LLMD_NEUTRAL_THRESHOLD_PCT:.0f}%)
+**Status:** 🟢 Better (>={LLMD_NEUTRAL_THRESHOLD_PCT:.0f}%) | 🟡 Similar (<{LLMD_NEUTRAL_THRESHOLD_PCT:.0f}%, or E2E ≤{LLMD_E2E_ABS_TOLERANCE_S:.0f} s) | 🔴 Worse (>={LLMD_NEUTRAL_THRESHOLD_PCT:.0f}%)
                 """)
         st.markdown(f"**Comparing:** {version_1} vs {version_2}")
 
@@ -2723,7 +2736,7 @@ def render_compare_versions_section(df, use_expander=True):
                 f"**Legend:** "
                 f"🟢 {version_1} performs better than {version_2} | "
                 f"🔴 {version_1} performs worse than {version_2} | "
-                f"🟡 Similar Performance (< {LLMD_NEUTRAL_THRESHOLD_PCT:.0f}% difference)"
+                f"🟡 Similar Performance (< {LLMD_NEUTRAL_THRESHOLD_PCT:.0f}% difference, or E2E ≤{LLMD_E2E_ABS_TOLERANCE_S:.0f} s)"
             )
 
             st.markdown("---")
@@ -3344,7 +3357,7 @@ Changes within ±{LLMD_NEUTRAL_THRESHOLD_PCT:.0f} % are not counted as losses.<b
             st.caption(
                 "Per-model delta (geometric mean across concurrency levels). "
                 f"🟢 Ahead (> {LLMD_NEUTRAL_THRESHOLD_PCT:.0f} %) · "
-                f"🟡 At Parity (± {LLMD_NEUTRAL_THRESHOLD_PCT:.0f} %) · "
+                f"🟡 At Parity (± {LLMD_NEUTRAL_THRESHOLD_PCT:.0f} %, or E2E ≤{LLMD_E2E_ABS_TOLERANCE_S:.0f} s) · "
                 f"🔴 Behind (> {LLMD_NEUTRAL_THRESHOLD_PCT:.0f} %). "
                 "For latency metrics (TTFT/ITL), lower is better."
             )
@@ -3670,7 +3683,8 @@ Changes within ±{LLMD_NEUTRAL_THRESHOLD_PCT:.0f} % are not counted as losses.<b
         unsafe_allow_html=True,
     )
     st.caption(
-        "% delta vs. previous release (geometric mean across concurrency levels)."
+        "% delta vs. previous release (geometric mean across concurrency levels). "
+        f"E2E latency changes of {LLMD_E2E_ABS_TOLERANCE_S:.0f} s or less are treated as similar even if >{LLMD_NEUTRAL_THRESHOLD_PCT:.0f} %."
     )
 
     heatmap_cols = [
@@ -3971,7 +3985,7 @@ Changes within ±{LLMD_NEUTRAL_THRESHOLD_PCT:.0f} % are not counted as losses.<b
                 for j, (mname, hib, _) in enumerate(heatmap_cols):
                     row_cols[j + 1].markdown(
                         f'<div style="text-align:center">'
-                        f"{_llmd_hm_cell(r.get(f'{mname}_pct'), hib)}</div>",
+                        f"{_llmd_hm_cell(r.get(f'{mname}_pct'), hib, r.get(f'{mname}_similar'))}</div>",
                         unsafe_allow_html=True,
                     )
                 with row_cols[-1]:
@@ -4671,7 +4685,8 @@ def render_llmd_competitive_analysis_section(df):
         f"(baseline underperforms by ≥{LLMD_NEUTRAL_THRESHOLD_PCT:.0f}%), "
         "and **Similar** otherwise. "
         "Metrics evaluated: Output Throughput, Total Throughput, "
-        "End-to-End Latency, TTFT P95, and ITL P95 geometric means."
+        "End-to-End Latency, TTFT P95, and ITL P95 geometric means. "
+        f"E2E latency changes of {LLMD_E2E_ABS_TOLERANCE_S:.0f} s or less are treated as Similar even if >{LLMD_NEUTRAL_THRESHOLD_PCT:.0f}%."
     )
 
     st.markdown(
@@ -5235,7 +5250,7 @@ def render_llmd_competitive_analysis_section(df):
                                     f"**Legend:** "
                                     f"🟢 {baseline} outperforms {competitor} | "
                                     f"🔴 {baseline} underperforms {competitor} | "
-                                    f"🟡 Similar Performance (< {LLMD_NEUTRAL_THRESHOLD_PCT:.0f}% difference)"
+                                    f"🟡 Similar Performance (< {LLMD_NEUTRAL_THRESHOLD_PCT:.0f}% difference, or E2E ≤{LLMD_E2E_ABS_TOLERANCE_S:.0f} s)"
                                 )
 
             if group_scores:
@@ -5406,7 +5421,7 @@ def render_llmd_competitive_analysis_section(df):
                                 f"&nbsp;|&nbsp; "
                                 f"🔴 {bl} loses majority of metrics "
                                 f"&nbsp;|&nbsp; "
-                                f"🟡 Similar (tied or &lt;{LLMD_NEUTRAL_THRESHOLD_PCT:.0f}% diff)</div>"
+                                f"🟡 Similar (tied or &lt;{LLMD_NEUTRAL_THRESHOLD_PCT:.0f}% diff; E2E ≤{LLMD_E2E_ABS_TOLERANCE_S:.0f} s)</div>"
                                 f"</details></div>",
                                 unsafe_allow_html=True,
                             )
