@@ -136,7 +136,8 @@ Auto-fill rule:
 9. **Filtered data:** one global section or per-chart “Filtered Data for Plot Lines” sections?
 10. **Offline ASR:** should offline rows appear in concurrency/throughput charts with `n/a`, or only in the ASR quality tab?
 11. **Locale:** drop `locale` and use `language` for TTS/ASR, or keep both?
-12. **Navigation tabs:** keep the six Omni tabs, or rename them to RHAIIS-style sections?
+12. **Dataset identity:** keep `dataset_split`/`locale`, or simplify to `dataset` + `language` with config/split/revision in `extra_json.dataset_variant`?
+13. **Navigation tabs:** keep the six Omni tabs, or rename them to RHAIIS-style sections?
 
 ## Closed decisions
 
@@ -145,7 +146,6 @@ Auto-fill rule:
 - Offline accuracy rows use `load_generator=offline` in the UI and blank in the CSV.
 - `gpu_model` is dropped; `accelerator` is the only hardware column.
 - `vllm_version` and `vllm_omni_version` are separate component versions; `runtime_version` is the product/build label.
-- `dataset` + `language` are first-class; config/split/revision belong in `extra_json.dataset_variant` until the dashboard filters on them.
 
 ## Implementation checklist
 
