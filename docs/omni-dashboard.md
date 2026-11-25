@@ -63,7 +63,7 @@ Online TTS/text rows must also have `concurrency`. Offline ASR rows may leave `c
 
 `accelerator` is the only hardware column. Put an exact GPU SKU in `extra_json.gpu_sku` if it ever matters; do not add a second hardware column.
 
-`load_generator` may be blank for offline accuracy-only rows (for example, the HF ASR leaderboard); `benchmark_tool` still identifies the scorer.
+`load_generator` may be blank for offline accuracy-only rows (for example, the HF ASR leaderboard); `benchmark_tool` still identifies the scorer. The dashboard displays those rows as `offline` rather than treating the scorer as a load generator.
 
 ### Text
 

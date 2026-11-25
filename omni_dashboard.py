@@ -89,6 +89,14 @@ FILTER_COLUMNS = [
     "concurrency_label",
 ]
 
+LOAD_GENERATORS = {
+    "guidellm",
+    "vllm-omni-bench-serve",
+    "vllm-bench-serve",
+    "locust",
+    "k6",
+}
+
 
 def _read_csv_from_s3(bucket: str, key: str, region: str = "us-east-1") -> pd.DataFrame:
     """Read a CSV from S3, using explicit credentials or anonymous access."""
@@ -129,7 +137,10 @@ def _normalise(df: pd.DataFrame) -> pd.DataFrame:
         df["load_generator"] = np.nan
     if "benchmark_tool" not in df.columns:
         df["benchmark_tool"] = np.nan
-    df["load_generator"] = df["load_generator"].fillna(df["benchmark_tool"])
+    df["load_generator"] = df["load_generator"].fillna("").astype(str)
+    tool = df["benchmark_tool"].fillna("").astype(str).str.lower()
+    fallback = tool.where(tool.isin(LOAD_GENERATORS), "offline")
+    df["load_generator"] = df["load_generator"].where(df["load_generator"] != "", fallback)
 
     for col in ("modality", "task_type", "model", "runtime_version", "accelerator"):
         if col not in df.columns:
