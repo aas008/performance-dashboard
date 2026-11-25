@@ -1,0 +1,159 @@
+# Omni vs RHAIIS dashboard — UX comparison and open questions
+
+Status: **draft checkpoint** — no final UX decisions below are implemented except where marked closed.
+
+## What was compared
+
+- RHAIIS view: left-panel navigation; Performance Plots filters and chart interactions.
+- Omni view: left-panel filter block; Overview/Throughput/Speech Out/Text Latency/ASR Quality/Data tabs.
+- Both tested locally through WebBridge against the same running Streamlit app.
+
+## RHAIIS experience (current)
+
+**Left panel is navigation, not filters:**
+
+- DASHBOARD: Overview, Competitive Analysis
+- PERFORMANCE ANALYSIS: Performance Plots, Compare Versions
+- INSIGHTS: Performance Trends, Cost Analysis, Model Performance Comparison, Energy Computation
+- TOOLS: IntelliConfig, Pareto Tradeoff Analysis, Runtime Server Configs, View Logs, Filtered Data
+
+**Performance Plots filters are in the main content, as numbered steps:**
+
+1. Select Accelerator(s)
+2. Select Input/Output Sequence Length (ISL/OSL)
+3. Select Version(s)
+4. Optional label filter / group by
+5. Select Model(s)
+6. Select TP Size(s)
+7. X-axis, Y-axis, concurrency ceiling, plot lines
+
+**Chart interaction:** clicking points, box-selecting, or lassoing adds plot lines to a comparison. A **Filtered Data for Plot Lines** section below the chart shows the source rows for the selected lines. There is also a separate **Filtered Data** page with a download.
+
+## Omni experience (current)
+
+**Left panel is the filter block:**
+
+- Modality
+- Task type
+- Load generator
+- Model
+- Runtime version
+- Accelerator
+- Concurrency
+
+**Main content:** Overview, Throughput, Speech Out, Text Latency, ASR Quality, Data.
+
+Charts are display-only today; there is no click-to-select/filtered-data behavior. The Data tab shows the filtered table and download.
+
+## What is left out when cloning RHAIIS for Omni
+
+| RHAIIS feature | Why it is left out / status |
+|---|---|
+| Left-panel navigation sections | Omni currently uses the left panel for filters; needs a decision (Q1). |
+| ISL/OSL profile filter | TTS/ASR rows do not carry prompt/output token lengths; text rows could. |
+| TP filter | Schema has `tp`, but the current Omni sample only has TP=1. |
+| Release-pair / upstream-parity overview | Omni has no release-pair model yet. |
+| Competitive analysis / regression heatmap / release health | Text/LLM-specific. |
+| Cost analysis / energy computation | Could map later; no cost model for audio/ASR yet. |
+| IntelliConfig / Pareto / runtime server configs | RHAIIS deployment-config tooling; not part of the first Omni pass. |
+| View Logs | Omni logs are currently in MLflow, not exposed by the dashboard. |
+| Token-only metrics as primary axes | TTS uses audio TTFP/RTF/underrun; ASR uses WER/RTFx. |
+
+## What is added on the Omni side
+
+| Omni feature | Why |
+|---|---|
+| Modality / input→output filter | TTS is text→audio; ASR is audio→text; text is text→text. |
+| Task type filter | `voice_clone`, `default_voice`, `voice_design`, `asr_transcription`, `text_to_text`. |
+| Load-generator filter | GuideLLM, `vllm-omni-bench-serve`, offline accuracy runs. |
+| Speech-out metrics | audio TTFP, RTF, duration, underrun, audio throughput, continuity. |
+| ASR metrics | WER, WER CI, RTFx, transcription throughput, input audio duration, normalization. |
+| Sparse metric handling | Text, speech-out, and ASR columns are intentionally blank when not applicable. |
+
+## Proposed Option 2: RHAIIS-like filter order + auto-fill
+
+Proposed sidebar/main filter order:
+
+1. Select Accelerator(s) — multiselect
+2. Select Version(s) — multiselect (`runtime_version`)
+3. Select Input / Output — `text → audio`, `audio → text`, `text → text`
+4. Select Task Type(s)
+5. Select Load Generator(s)
+6. Select Model(s) — **auto-populated from 3/4/5**
+7. Select TP Size(s) — if more than one TP exists
+8. Concurrency
+
+Auto-fill rule:
+
+- Selecting an input/output pair filters the task, load-generator, and model option sets to rows that have data.
+- The model filter **auto-selects all available models** for that pair/task, rather than showing models with no data.
+- Changing the pair clears stale model selections and repopulates.
+
+## User journeys
+
+### TTS (text → audio)
+
+1. Open Omni Dashboard.
+2. Choose `text → audio`.
+3. Models auto-fill to TTS models with data.
+4. Choose model/version/accelerator and concurrency.
+5. Review Throughput and Speech Out.
+6. Check audio TTFP, RTF (lower is better), underrun, and audio throughput.
+7. Click chart points/select lines; inspect the filtered rows; download CSV if needed.
+
+### ASR (audio → text)
+
+1. Open Omni Dashboard.
+2. Choose `audio → text`.
+3. Models auto-fill to ASR models with data.
+4. Choose the dataset/normalization row if multiple are present.
+5. Review ASR Quality for WER, RTFx, and transcription throughput.
+6. Offline accuracy rows show `load_generator=offline` and no concurrency; GuideLLM rows show online latency/throughput.
+
+## Test log
+
+| Test | Result |
+|---|---|
+| WebBridge: switch RHAIIS → Omni | Both views render; view selector shows five dashboards. |
+| WebBridge: RHAIIS Performance Plots | Numbered filters found; chart and Filtered Data for Plot Lines section present. |
+| WebBridge: Omni sidebar | Found Modality, Task type, Load generator, Model, Runtime version, Accelerator, Concurrency. |
+| WebBridge: Omni tabs | Six tabs present; 16 Plotly charts across tabs. |
+| Omni offline row display | HF ASR row now shows `offline`, not the HF scorer as a load generator. |
+| Auto-fill model filter | **Not implemented yet.** |
+| Omni graph click → filtered data | **Not implemented yet.** |
+| RHAIIS graph click behavior | Code path uses point/box/lasso selection and a plot-line comparison table. |
+
+## Open questions
+
+1. **Left panel:** keep the RHAIIS navigation in Omni and move filters into main content, or keep filter-only sidebar? The current mismatch is because RHAIIS uses the left panel for navigation.
+2. **Pages:** which RHAIIS pages should Omni clone — Overview, Performance Plots, Compare Versions, Performance Trends, Model Comparison, Filtered Data? Which can be left out for now?
+3. **Filter order:** is the proposed order (Accelerator → Version → Input/Output → Task → Load gen → Model → TP → Concurrency) correct, or should Input/Output come first for TTS/ASR users?
+4. **Auto-fill semantics:** auto-select all available models, or only narrow the options and let the user choose?
+5. **Modality vs Input/Output:** replace `Modality` with the input→output pair, or keep both?
+6. **TP:** include TP in the Omni UI? Current data is all TP=1.
+7. **Version label:** show product `runtime_version` (`3.6 GA`, `3.6-fast2`) or component versions (`vllm`, `vllm-omni`) in the main filter?
+8. **Graph selection:** should clicking add plot lines like RHAIIS, filter the whole dashboard, or just open a filtered table?
+9. **Filtered data:** one global section or per-chart “Filtered Data for Plot Lines” sections?
+10. **Offline ASR:** should offline rows appear in concurrency/throughput charts with `n/a`, or only in the ASR quality tab?
+11. **Locale:** drop `locale` and use `language` for TTS/ASR, or keep both?
+12. **Navigation tabs:** keep the six Omni tabs, or rename them to RHAIIS-style sections?
+
+## Closed decisions
+
+- Sparse columns are allowed; modality-inapplicable fields stay blank.
+- `benchmark_tool` and `load_generator` are separate concepts.
+- Offline accuracy rows use `load_generator=offline` in the UI and blank in the CSV.
+- `gpu_model` is dropped; `accelerator` is the only hardware column.
+- `vllm_version` and `vllm_omni_version` are separate component versions; `runtime_version` is the product/build label.
+- `dataset` + `language` are first-class; config/split/revision belong in `extra_json.dataset_variant` until the dashboard filters on them.
+
+## Implementation checklist
+
+- [ ] Decide Q1/Q2 (navigation/page scope).
+- [ ] Reorder filters and add Input/Output.
+- [ ] Implement cascading task/load-generator/model options.
+- [ ] Auto-select models for selected modality/task.
+- [ ] Add graph point/box/lasso selection and filtered-data sections.
+- [ ] Keep the global Filtered Data download.
+- [ ] Test TTS and ASR journeys through WebBridge.
+- [ ] Update this document with closed questions and screenshots.
