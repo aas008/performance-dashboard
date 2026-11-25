@@ -21,7 +21,6 @@
     "num_warmups": 0,
     "prefix_caching": false,
     "audio_sample_rate_hz": 24000,
-    "gpu_model": "H200",
     "gpu_count": 1,
     "tp": 1
   }

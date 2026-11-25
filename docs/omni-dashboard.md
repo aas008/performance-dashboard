@@ -59,7 +59,11 @@ Online TTS/text rows must also have `concurrency`. Offline ASR rows may leave `c
 
 ### Core
 
-`schema_version`, `source_format`, `timestamp_utc`, `run_name`, `benchmark_run_id`, `repetition`, `mlflow_run_id`, `mlflow_parent_run_id`, `mlflow_experiment_id`, `cluster`, `namespace`, `deployment_uuid`, `deployment_pod_name`, `grafana_dashboard_uid`, `model`, `model_revision`, `runtime`, `runtime_version`, `vllm_version`, `vllm_omni_version`, `image_tag`, `image_digest`, `accelerator`, `gpu_model`, `gpu_count`, `tp`, `pp`, `dp`, `modality`, `input_modality`, `output_modality`, `task_type`, `benchmark_tool`, `benchmark_tool_version`, `load_generator`, `dataset`, `dataset_path`, `dataset_split`, `locale`, `num_prompts`, `num_utterances`, `request_rate`, `concurrency`, `measured_concurrency`, `num_warmups`, `turns`, `prefix_tokens`, `prefix_count`, `prefix_caching`, `spec_decoding`, `request_type`, `extra_body_json`, `runtime_args`, `env_vars_json`, `max_num_seqs`, `max_num_batched_tokens`, `duration_s`, `successful_requests`, `errored_requests`, `benchmark_start_ms`, `benchmark_end_ms`
+`schema_version`, `source_format`, `timestamp_utc`, `run_name`, `benchmark_run_id`, `repetition`, `mlflow_run_id`, `mlflow_parent_run_id`, `mlflow_experiment_id`, `cluster`, `namespace`, `deployment_uuid`, `deployment_pod_name`, `grafana_dashboard_uid`, `model`, `model_revision`, `runtime`, `runtime_version`, `vllm_version`, `vllm_omni_version`, `image_tag`, `image_digest`, `accelerator`, `gpu_count`, `tp`, `pp`, `dp`, `modality`, `input_modality`, `output_modality`, `task_type`, `benchmark_tool`, `benchmark_tool_version`, `load_generator`, `dataset`, `dataset_path`, `dataset_split`, `locale`, `num_prompts`, `num_utterances`, `request_rate`, `concurrency`, `measured_concurrency`, `num_warmups`, `turns`, `prefix_tokens`, `prefix_count`, `prefix_caching`, `spec_decoding`, `request_type`, `extra_body_json`, `runtime_args`, `env_vars_json`, `max_num_seqs`, `max_num_batched_tokens`, `duration_s`, `successful_requests`, `errored_requests`, `benchmark_start_ms`, `benchmark_end_ms`
+
+`accelerator` is the only hardware column. Put an exact GPU SKU in `extra_json.gpu_sku` if it ever matters; do not add a second hardware column.
+
+`load_generator` may be blank for offline accuracy-only rows (for example, the HF ASR leaderboard); `benchmark_tool` still identifies the scorer.
 
 ### Text
 

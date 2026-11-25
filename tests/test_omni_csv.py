@@ -30,8 +30,9 @@ def _header(path):
 
 def test_template_and_sample_schema():
     header = _header(TEMPLATE)
-    assert len(header) == 166
-    assert len(set(header)) == 166
+    assert len(header) == 165
+    assert len(set(header)) == 165
+    assert "gpu_model" not in header
     assert REQUIRED.issubset(header)
     assert "extra_json" in header
     assert "stage_metrics_json" in header
@@ -42,9 +43,13 @@ def test_template_and_sample_schema():
     assert {row["task_type"] for row in rows} == {"voice_clone", "asr_transcription", "text_to_text"}
     assert {row["load_generator"] for row in rows} == {
         "vllm-omni-bench-serve",
-        "hf-open-asr-leaderboard",
+        "",
         "guidellm",
     }
+    hf_asr = [row for row in rows if row["benchmark_tool"] == "hf-open-asr-leaderboard"]
+    assert len(hf_asr) == 1
+    assert hf_asr[0]["load_generator"] == ""
+    assert hf_asr[0]["runtime_args"].startswith("vllm serve")
     audio_guidellm = [
         row
         for row in rows
@@ -59,7 +64,8 @@ def test_template_and_sample_schema():
         assert row["model"]
         assert row["task_type"]
         assert row["benchmark_tool"]
-        assert row["load_generator"]
+        if row["benchmark_tool"] != "hf-open-asr-leaderboard":
+            assert row["load_generator"]
         if row["task_type"] != "asr_transcription":
             assert row["concurrency"]
 
@@ -119,7 +125,7 @@ def test_converter_smoke(tmp_path):
     assert row["task_type"] == "voice_clone"
     assert row["concurrency"] == "1"
     assert row["model"] and row["benchmark_tool"]
-    assert len(_header(template)) == 166
+    assert len(_header(template)) == 165
 
 
 if __name__ == "__main__":

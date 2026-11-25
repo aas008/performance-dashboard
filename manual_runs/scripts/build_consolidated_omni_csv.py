@@ -33,7 +33,7 @@ CORE_COLUMNS = [
     "grafana_dashboard_uid",
     "model", "model_revision", "runtime", "runtime_version",
     "vllm_version", "vllm_omni_version", "image_tag", "image_digest",
-    "accelerator", "gpu_model", "gpu_count", "tp", "pp", "dp",
+    "accelerator", "gpu_count", "tp", "pp", "dp",
     "modality", "input_modality", "output_modality", "task_type",
     "benchmark_tool", "benchmark_tool_version", "load_generator",
     "dataset", "dataset_path", "dataset_split", "locale",
@@ -342,7 +342,6 @@ def build_legacy_row(r, path, metadata):
     row["runtime_version"] = r.get("version", "")
     row["tp"] = fnum(r.get("tp", ""))
     row["accelerator"] = r.get("accelerator", "")
-    row["gpu_model"] = r.get("accelerator", "")
     row["image_tag"] = r.get("image_tag", "")
     row["modality"] = "audio"
     row["input_modality"] = "text"
@@ -460,7 +459,6 @@ def build_asr_row(r, path, metadata):
     row["runtime_version"] = pick(r, ASR_ALIASES["runtime_version"])
     row["image_tag"] = pick(r, ASR_ALIASES["image_tag"])
     row["accelerator"] = pick(r, ASR_ALIASES["accelerator"])
-    row["gpu_model"] = row["accelerator"]
     row["tp"] = fnum(pick(r, ASR_ALIASES["tp"]))
     row["modality"] = "audio"
     row["input_modality"] = "audio"
