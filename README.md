@@ -1,6 +1,6 @@
 # AI Inference Performance Dashboard
 
-A comprehensive performance analysis dashboard for AI inference benchmarks including RHAIIS (Red Hat AI Inference Server), LLM-D (disaggregated LLM inference), and MLPerf submissions. This dashboard provides interactive visualizations and analysis of AI model performance across different accelerators, versions, and configurations.
+A comprehensive performance analysis dashboard for AI inference benchmarks including RHAIIS (Red Hat AI Inference Server), LLM-D (disaggregated LLM inference), vLLM-Omni (speech-in, speech-out, and text), and MLPerf submissions. This dashboard provides interactive visualizations and analysis of AI model performance across different accelerators, versions, and configurations.
 
 ## Features
 
@@ -23,6 +23,14 @@ A comprehensive performance analysis dashboard for AI inference benchmarks inclu
   - Detailed metrics and summary statistics
 - **Performance Plots**: Interactive visualizations with multiple Y-axis metric options
 - **Runtime Configuration Tracking**: View server configurations and deployment parameters
+
+### Omni Dashboard
+
+- **Speech, ASR, and text views**: Filter one consolidated CSV by modality, task type, load generator, model, runtime, accelerator, and concurrency
+- **Speech-out metrics**: Audio TTFP, RTF, underrun, audio throughput, and streaming continuity
+- **ASR metrics**: WER, RTFx, transcription throughput, and input-audio duration
+- **Text metrics**: TTFT, TPOT, ITL, E2EL, and token throughput
+- **Extensible schema**: One row per benchmark point; modality-inapplicable fields may be blank, and future metrics live in `extra_json`
 
 ### MLPerf Dashboard
 
@@ -270,6 +278,26 @@ When you have code changes:
 
 2. **Consolidate data**: Merge new results with existing CSV file
 
+## Omni Data Management
+
+The Omni dashboard reads `datasets/omni/consolidated_dashboard_omni.csv` locally, or the `S3_KEY_OMNI` object when `S3_BUCKET` is set. A sanitized sample and header-only template are included:
+
+- `datasets/omni/consolidated_dashboard_omni_template.csv`
+- `datasets/omni/consolidated_dashboard_omni_sample.csv`
+- `datasets/omni/consolidated_dashboard_omni_metadata.example.json`
+
+Convert vLLM-Omni bench JSON, optional ASR CSV/JSON, and an optional legacy benchmark CSV:
+
+```bash
+python manual_runs/scripts/build_consolidated_omni_csv.py \
+  --metadata-json datasets/omni/consolidated_dashboard_omni_metadata.example.json \
+  --omni-json path/to/omni-json/ \
+  --asr-csv path/to/asr-results.csv \
+  --output datasets/omni/consolidated_dashboard_omni.csv
+```
+
+See `docs/omni-dashboard.md` for the schema, units, and the extension rule: add new metrics to `extra_json` first and promote them to first-class columns only when a dashboard panel needs them.
+
 ## MLPerf Data Management
 
 ### MLPerf CSV Files
@@ -374,6 +402,7 @@ The dashboard can load CSV data directly from an AWS S3 bucket instead of local 
 | `S3_BUCKET`             | S3 bucket name (enables S3 mode when set) | _(none)_                     |
 | `S3_KEY`                | Path to RHAIIS CSV in bucket              | `consolidated_dashboard.csv` |
 | `S3_KEY_LLMD`           | Path to LLM-D CSV in bucket               | `llmd-dashboard.csv`         |
+| `S3_KEY_OMNI`           | Path to Omni CSV in bucket                | `consolidated_dashboard_omni.csv` |
 | `S3_REGION`             | AWS region                                | `us-east-1`                  |
 | `AWS_ACCESS_KEY_ID`     | AWS access key (for private buckets)      | _(none)_                     |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key (for private buckets)      | _(none)_                     |
@@ -393,6 +422,7 @@ export AWS_SECRET_ACCESS_KEY='your-secret'
 export S3_BUCKET='your-s3-bucket'
 export S3_KEY='location of the consolidated-dashboard.csv file in the bucket'
 export S3_KEY_LLMD='location of the llmd-dashboard.csv file in the bucket'
+export S3_KEY_OMNI='location of the consolidated_dashboard_omni.csv file in the bucket'
 export S3_REGION='us-east-1'
 
 # Run the dashboard

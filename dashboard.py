@@ -160,6 +160,15 @@ except ImportError:
     CPU_AVAILABLE = False
     print("Warning: cpu_dashboard module not found. vLLM CPU view will be disabled.")
 
+# Import Omni dashboard
+try:
+    from omni_dashboard import render_omni_dashboard
+
+    OMNI_AVAILABLE = True
+except ImportError:
+    OMNI_AVAILABLE = False
+    print("Warning: omni_dashboard module not found. Omni view will be disabled.")
+
 # Configure logging to stdout for container logs
 logging.basicConfig(
     level=logging.INFO,
@@ -173,6 +182,7 @@ S3_BUCKET = os.environ.get("S3_BUCKET")
 S3_KEY = os.environ.get("S3_KEY", "consolidated_dashboard.csv")
 S3_KEY_LLMD = os.environ.get("S3_KEY_LLMD", "llmd-dashboard.csv")
 S3_KEY_CPU = os.environ.get("S3_KEY_CPU", "cpu_dashboard.csv")
+S3_KEY_OMNI = os.environ.get("S3_KEY_OMNI", "consolidated_dashboard_omni.csv")
 S3_REGION = os.environ.get("S3_REGION", "us-east-1")
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
@@ -12404,6 +12414,8 @@ def render_sidebar_header():
             view_options.append("LLM-D Dashboard")
         if CPU_AVAILABLE:
             view_options.append("vLLM CPU Dashboard")
+        if OMNI_AVAILABLE:
+            view_options.append("Omni Dashboard")
 
         if len(view_options) > 1:
             # Pre-populate the widget key so we never need the `index`
@@ -12466,6 +12478,7 @@ if "view" in st.query_params and "dashboard_view_selector" not in st.session_sta
         "MLPerf Dashboard",
         "LLM-D Dashboard",
         "vLLM CPU Dashboard",
+        "Omni Dashboard",
     ]:
         st.session_state.selected_view = view_from_url
         st.session_state.dashboard_view_selector = view_from_url
@@ -12607,6 +12620,11 @@ if LLMD_AVAILABLE and selected_view == "LLM-D Dashboard":
 # If vLLM CPU view is selected, render CPU dashboard and exit
 if CPU_AVAILABLE and selected_view == "vLLM CPU Dashboard":
     render_cpu_dashboard("cpu_dashboard.csv")
+    st.stop()  # Stop execution here, don't load RHAIIS data
+
+# If Omni view is selected, render Omni dashboard and exit
+if OMNI_AVAILABLE and selected_view == "Omni Dashboard":
+    render_omni_dashboard("datasets/omni/consolidated_dashboard_omni_sample.csv")
     st.stop()  # Stop execution here, don't load RHAIIS data
 
 # Otherwise, continue with RHAIIS dashboard

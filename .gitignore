@@ -16,6 +16,8 @@ __pycache__/
 !mlperf-data/mlperf-*.csv
 !mlperf-data/summaries/*.csv
 !datasets/summaries/*.csv
+!datasets/omni/*.csv
+!datasets/omni/*.json
 vllm-cpu-perf-eval/
 
 # Ignore large original dataset files in datasets/ (pkl, parquet, npy)

@@ -1,0 +1,28 @@
+{
+  "defaults": {
+    "schema_version": "1.0",
+    "source_format": "vllm-omni-bench-json",
+    "runtime": "vllm-omni",
+    "runtime_version": "vllm-omni-0.30.0",
+    "vllm_version": "0.30.0",
+    "vllm_omni_version": "0.30.0",
+    "benchmark_tool": "vllm-omni-bench-serve",
+    "load_generator": "vllm-omni-bench-serve",
+    "image_tag": "example/vllm-omni:0.30.0",
+    "cluster": "demo",
+    "namespace": "demo",
+    "modality": "audio",
+    "input_modality": "text",
+    "output_modality": "audio",
+    "task_type": "voice_clone",
+    "dataset": "seed-tts",
+    "dataset_path": "/data/datasets/seed-tts",
+    "locale": "en",
+    "num_warmups": 0,
+    "prefix_caching": false,
+    "audio_sample_rate_hz": 24000,
+    "gpu_model": "H200",
+    "gpu_count": 1,
+    "tp": 1
+  }
+}
