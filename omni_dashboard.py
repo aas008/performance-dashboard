@@ -79,16 +79,6 @@ NUMERIC_COLUMNS = [
     "audio_output_duration_s_total",
 ]
 
-FILTER_COLUMNS = [
-    "modality",
-    "task_type",
-    "load_generator",
-    "model",
-    "runtime_version",
-    "accelerator",
-    "concurrency_label",
-]
-
 LOAD_GENERATORS = {
     "guidellm",
     "vllm-omni-bench-serve",
@@ -96,6 +86,13 @@ LOAD_GENERATORS = {
     "locust",
     "k6",
 }
+
+PLOT_CUSTOM_DATA = [
+    "model",
+    "runtime_version",
+    "load_generator",
+    "concurrency_label",
+]
 
 
 def _read_csv_from_s3(bucket: str, key: str, region: str = "us-east-1") -> pd.DataFrame:
@@ -142,10 +139,20 @@ def _normalise(df: pd.DataFrame) -> pd.DataFrame:
     fallback = tool.where(tool.isin(LOAD_GENERATORS), "offline")
     df["load_generator"] = df["load_generator"].where(df["load_generator"] != "", fallback)
 
-    for col in ("modality", "task_type", "model", "runtime_version", "accelerator"):
+    for col in (
+        "modality",
+        "input_modality",
+        "output_modality",
+        "task_type",
+        "model",
+        "runtime_version",
+        "accelerator",
+    ):
         if col not in df.columns:
             df[col] = "unknown"
         df[col] = df[col].fillna("unknown")
+
+    df["io_pair"] = df["input_modality"].astype(str) + " → " + df["output_modality"].astype(str)
 
     def _conc_label(value):
         if pd.isna(value):
@@ -186,56 +193,147 @@ def load_omni_data(file_path: str) -> Optional[pd.DataFrame]:
         return None
 
 
+def _values(frame: pd.DataFrame, column: str) -> list:
+    """Return non-empty values for a filter column."""
+    if column not in frame.columns:
+        return []
+    return sorted(
+        value
+        for value in frame[column].dropna().unique()
+        if str(value).strip() not in ("", "unknown", "nan", "None")
+    )
+
+
+def _multiselect(label: str, options: list, key: str) -> list:
+    """Render a multiselect with all options selected by default."""
+    if not options:
+        return []
+    return st.sidebar.multiselect(label, options, default=options, key=key)
+
+
+def _selection_key(prefix: str, *groups) -> str:
+    """Build a stable widget key from the upstream filter selections."""
+    signature = "|".join(",".join(str(value) for value in sorted(group)) for group in groups)
+    return f"{prefix}_{signature}"
+
+
 def _sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
-    """Render Omni-specific sidebar filters and return the filtered frame."""
+    """Render RHAIIS-ordered filter steps with cascading model auto-fill."""
     st.sidebar.markdown("### Omni filters")
+    st.sidebar.caption(
+        "Filters follow the RHAIIS order. Model options auto-fill from the "
+        "selected input/output and task."
+    )
     filtered = df.copy()
 
-    def _multiselect(label, column):
-        values = sorted(v for v in df[column].dropna().unique() if str(v) != "unknown")
-        if not values:
-            return None
-        selected = st.sidebar.multiselect(label, values, default=values, key=f"omni_{column}")
-        return selected
+    accelerators = _multiselect(
+        "1️⃣ Select Accelerator(s)", _values(df, "accelerator"), "omni_accelerator"
+    )
+    if accelerators:
+        filtered = filtered[filtered["accelerator"].isin(accelerators)]
 
-    modality = _multiselect("Modality", "modality")
-    if modality is not None:
-        filtered = filtered[filtered["modality"].isin(modality)]
+    versions = _multiselect(
+        "2️⃣ Select Version(s)", _values(df, "runtime_version"), "omni_version"
+    )
+    if versions:
+        filtered = filtered[filtered["runtime_version"].isin(versions)]
 
-    task = _multiselect("Task type", "task_type")
-    if task is not None:
-        filtered = filtered[filtered["task_type"].isin(task)]
+    io_pairs = _multiselect("3️⃣ Select Input / Output", _values(df, "io_pair"), "omni_io")
+    if io_pairs:
+        filtered = filtered[filtered["io_pair"].isin(io_pairs)]
 
-    generator = _multiselect("Load generator", "load_generator")
-    if generator is not None:
-        filtered = filtered[filtered["load_generator"].isin(generator)]
+    tasks = _multiselect(
+        "4️⃣ Select Task Type(s)",
+        _values(filtered, "task_type"),
+        _selection_key("omni_task", io_pairs),
+    )
+    if tasks:
+        filtered = filtered[filtered["task_type"].isin(tasks)]
 
-    for column, label in (
-        ("model", "Model"),
-        ("runtime_version", "Runtime version"),
-        ("accelerator", "Accelerator"),
-    ):
-        values = sorted(v for v in df[column].dropna().unique() if str(v) != "unknown")
-        if values:
-            choice = st.sidebar.selectbox(label, ["All"] + values, key=f"omni_{column}")
-            if choice != "All":
-                filtered = filtered[filtered[column] == choice]
+    generators = _multiselect(
+        "5️⃣ Select Load Generator(s)",
+        _values(filtered, "load_generator"),
+        _selection_key("omni_generator", io_pairs, tasks),
+    )
+    if generators:
+        filtered = filtered[filtered["load_generator"].isin(generators)]
+
+    models = _multiselect(
+        "6️⃣ Select Model(s)",
+        _values(filtered, "model"),
+        _selection_key("omni_model", io_pairs, tasks, generators),
+    )
+    if models:
+        filtered = filtered[filtered["model"].isin(models)]
+
+    tps = _multiselect(
+        "7️⃣ Select TP Size(s)",
+        _values(filtered, "tp"),
+        _selection_key("omni_tp", io_pairs, tasks, generators, models),
+    )
+    if tps:
+        filtered = filtered[filtered["tp"].isin(tps)]
 
     conc_options = sorted(
         df["concurrency_label"].dropna().unique(),
-        key=lambda v: (v == "n/a", float(v) if v != "n/a" else 0),
+        key=lambda value: (value == "n/a", float(value) if value != "n/a" else 0),
     )
     if conc_options:
         selected = st.sidebar.multiselect(
-            "Concurrency", conc_options, default=conc_options, key="omni_concurrency"
+            "8️⃣ Select Concurrency",
+            conc_options,
+            default=conc_options,
+            key="omni_concurrency",
         )
         filtered = filtered[filtered["concurrency_label"].isin(selected)]
 
     return filtered
 
 
-def _line(df: pd.DataFrame, y: str, title: str, y_label: str, color: str = "series"):
-    """Render a concurrency line chart if the metric has data."""
+def _selected_rows(sub: pd.DataFrame, event) -> Optional[pd.DataFrame]:
+    """Return rows corresponding to the selected plot points."""
+    selection = getattr(event, "selection", None)
+    if selection is None:
+        return None
+    points = selection.get("points", []) if isinstance(selection, dict) else getattr(selection, "points", [])
+    selected = set()
+    for point in points or []:
+        custom = point.get("customdata") if isinstance(point, dict) else getattr(point, "customdata", None)
+        if custom and len(custom) >= len(PLOT_CUSTOM_DATA):
+            selected.add(tuple(str(value) for value in custom[: len(PLOT_CUSTOM_DATA)]))
+    if not selected:
+        return None
+
+    def _matches(row):
+        key = (
+            str(row["model"]),
+            str(row["runtime_version"]),
+            str(row["load_generator"]),
+            str(row["concurrency_label"]),
+        )
+        return key in selected
+
+    return sub[sub.apply(_matches, axis=1)]
+
+
+def _show_selected_rows(sub: pd.DataFrame, event):
+    selected = _selected_rows(sub, event)
+    if selected is None or selected.empty:
+        return
+    with st.expander("📄 Filtered Data for Selected Points", expanded=True):
+        st.caption("Rows for the points or lines you selected on the chart.")
+        st.dataframe(selected, use_container_width=True, hide_index=True)
+
+
+def _line(
+    df: pd.DataFrame,
+    y: str,
+    title: str,
+    y_label: str,
+    key: str,
+    color: str = "series",
+):
+    """Render a selectable concurrency line chart if the metric has data."""
     sub = df.dropna(subset=["concurrency", y])
     if sub.empty:
         st.info(f"No {y_label} data for the current filters.")
@@ -248,13 +346,22 @@ def _line(df: pd.DataFrame, y: str, title: str, y_label: str, color: str = "seri
         markers=True,
         title=title,
         labels={"concurrency": "Concurrency", y: y_label, color: "Model | version | generator"},
+        custom_data=PLOT_CUSTOM_DATA,
     )
     fig.update_layout(legend_title_text="", margin=dict(l=10, r=10, t=50, b=10))
-    st.plotly_chart(fig, use_container_width=True)
+    event = st.plotly_chart(
+        fig,
+        use_container_width=True,
+        key=key,
+        on_select="rerun",
+        selection_mode=("points", "box", "lasso"),
+    )
+    st.caption("Click points, or box/lasso-select an area, to inspect the source rows.")
+    _show_selected_rows(sub, event)
 
 
-def _bar(df: pd.DataFrame, y: str, title: str, y_label: str, color: str = "model"):
-    """Render a bar chart for offline/ASR metrics."""
+def _bar(df: pd.DataFrame, y: str, title: str, y_label: str, key: str, color: str = "model"):
+    """Render a selectable bar chart for offline/ASR metrics."""
     sub = df.dropna(subset=[y])
     if sub.empty:
         st.info(f"No {y_label} data for the current filters.")
@@ -266,9 +373,17 @@ def _bar(df: pd.DataFrame, y: str, title: str, y_label: str, color: str = "model
         color=color,
         title=title,
         labels={y: y_label, color: color.replace("_", " ").title()},
+        custom_data=PLOT_CUSTOM_DATA,
     )
     fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=50, b=10))
-    st.plotly_chart(fig, use_container_width=True)
+    event = st.plotly_chart(
+        fig,
+        use_container_width=True,
+        key=key,
+        on_select="rerun",
+        selection_mode=("points", "box", "lasso"),
+    )
+    _show_selected_rows(sub, event)
 
 
 def _overview(df: pd.DataFrame):
@@ -292,10 +407,10 @@ def _overview(df: pd.DataFrame):
 
 
 def _throughput_tab(df: pd.DataFrame):
-    _line(df, "request_throughput_rps", "Request throughput", "Requests / second")
-    _line(df, "audio_throughput_x", "Audio throughput", "Audio-seconds / wall-second")
-    _line(df, "output_token_throughput", "Output token throughput", "Tokens / second")
-    _line(df, "total_token_throughput", "Total token throughput", "Tokens / second")
+    _line(df, "request_throughput_rps", "Request throughput", "Requests / second", "omni_req_tput")
+    _line(df, "audio_throughput_x", "Audio throughput", "Audio-seconds / wall-second", "omni_audio_tput")
+    _line(df, "output_token_throughput", "Output token throughput", "Tokens / second", "omni_out_tok_tput")
+    _line(df, "total_token_throughput", "Total token throughput", "Tokens / second", "omni_total_tok_tput")
 
 
 def _speech_tab(df: pd.DataFrame):
@@ -303,10 +418,10 @@ def _speech_tab(df: pd.DataFrame):
     if speech.empty:
         st.info("No speech-output rows for the current filters.")
         return
-    _line(speech, "audio_rtf_mean", "Mean audio RTF", "RTF (lower is better)")
-    _line(speech, "audio_rtf_p95", "P95 audio RTF", "RTF (lower is better)")
-    _line(speech, "audio_ttfp_ms_mean", "Mean audio TTFP", "Milliseconds")
-    _line(speech, "audio_underrun_s_mean", "Mean audio underrun", "Seconds")
+    _line(speech, "audio_rtf_mean", "Mean audio RTF", "RTF (lower is better)", "omni_audio_rtf_mean")
+    _line(speech, "audio_rtf_p95", "P95 audio RTF", "RTF (lower is better)", "omni_audio_rtf_p95")
+    _line(speech, "audio_ttfp_ms_mean", "Mean audio TTFP", "Milliseconds", "omni_audio_ttfp")
+    _line(speech, "audio_underrun_s_mean", "Mean audio underrun", "Seconds", "omni_audio_underrun")
     sub = speech.dropna(subset=["concurrency", "audio_rtf_p95"])
     if not sub.empty:
         fig = px.line(
@@ -317,24 +432,29 @@ def _speech_tab(df: pd.DataFrame):
             markers=True,
             title="P95 audio RTF with real-time boundary",
             labels={"concurrency": "Concurrency", "audio_rtf_p95": "P95 RTF"},
+            custom_data=PLOT_CUSTOM_DATA,
         )
         fig.add_hline(y=1.0, line_dash="dash", annotation_text="real-time boundary")
         fig.update_layout(legend_title_text="", margin=dict(l=10, r=10, t=50, b=10))
-        st.plotly_chart(fig, use_container_width=True)
+        event = st.plotly_chart(
+            fig,
+            use_container_width=True,
+            key="omni_audio_rtf_boundary",
+            on_select="rerun",
+            selection_mode=("points", "box", "lasso"),
+        )
+        _show_selected_rows(sub, event)
 
 
 def _text_tab(df: pd.DataFrame):
-    text = df[
-        df["output_modality"].eq("text")
-        & df["ttft_ms_median"].notna()
-    ]
+    text = df[df["output_modality"].eq("text") & df["ttft_ms_median"].notna()]
     if text.empty:
         st.info("No text-latency rows for the current filters.")
         return
-    _line(text, "ttft_ms_median", "Median TTFT", "Milliseconds")
-    _line(text, "tpot_ms_median", "Median TPOT", "Milliseconds")
-    _line(text, "itl_ms_median", "Median ITL", "Milliseconds")
-    _line(text, "e2el_ms_median", "Median end-to-end latency", "Milliseconds")
+    _line(text, "ttft_ms_median", "Median TTFT", "Milliseconds", "omni_ttft")
+    _line(text, "tpot_ms_median", "Median TPOT", "Milliseconds", "omni_tpot")
+    _line(text, "itl_ms_median", "Median ITL", "Milliseconds", "omni_itl")
+    _line(text, "e2el_ms_median", "Median end-to-end latency", "Milliseconds", "omni_e2el")
 
 
 def _asr_tab(df: pd.DataFrame):
@@ -342,13 +462,14 @@ def _asr_tab(df: pd.DataFrame):
     if asr.empty:
         st.info("No ASR rows for the current filters.")
         return
-    _bar(asr, "wer", "Word error rate", "WER (lower is better)")
-    _bar(asr, "rtfx", "RTFx", "Audio-seconds / wall-second")
+    _bar(asr, "wer", "Word error rate", "WER (lower is better)", "omni_wer")
+    _bar(asr, "rtfx", "RTFx", "Audio-seconds / wall-second", "omni_rtfx")
     _bar(
         asr,
         "transcription_throughput_utterances_s",
         "Transcription throughput",
         "Utterances / second",
+        "omni_transcription_tput",
     )
 
 

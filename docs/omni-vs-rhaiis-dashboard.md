@@ -157,3 +157,28 @@ Auto-fill rule:
 - [ ] Keep the global Filtered Data download.
 - [ ] Test TTS and ASR journeys through WebBridge.
 - [ ] Update this document with closed questions and screenshots.
+
+## Checkpoint 2 — implemented and tested
+
+Implemented in `omni_dashboard.py`:
+
+- RHAIIS-style numbered filter order: Accelerator → Version → Input/Output → Task → Load Generator → Model → TP → Concurrency.
+- Cascading option sets: selecting an input/output pair narrows task, load generator, and model options.
+- Model auto-fill: all models with data for the selected pair/task/load generator are selected by default.
+- Point/box/lasso selection on line charts and point selection on ASR bars.
+- Per-chart **Filtered Data for Selected Points** section with the source rows.
+
+WebBridge/Playwright test results:
+
+| Test | Result |
+|---|---|
+| TTS `text → audio` auto-fill | Passed — task `voice_clone`, load generator `vllm-omni-bench-serve`, model `example/tts-1b` only. |
+| TTS point click | Passed — selected c=1 point and rendered the filtered-data table. |
+| ASR `audio → text` auto-fill | Passed — task `asr_transcription`, load generators `guidellm`/`offline`, model `example/asr-2b` only. |
+| ASR bar click | Passed — bar selection rendered the filtered-data section. |
+| Text `text → text` auto-fill | Passed — model `example/llm-8b` only. |
+| Text point click | Passed — selected a TTFT point and rendered the filtered-data section. |
+| RHAIIS Performance Plots comparison | Passed — numbered filters and plot-line filtered-data behavior confirmed. |
+| Left-panel navigation parity | Open — RHAIIS uses the left panel for navigation; Omni still uses it for filters. |
+
+Still open: Q1/Q2 (left-panel navigation and page scope), graph-selection semantics for multi-line comparison, TP/version labeling, offline ASR chart treatment, and `locale` vs `language`.
