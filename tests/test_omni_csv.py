@@ -37,7 +37,7 @@ def test_template_and_sample_schema():
     assert "stage_metrics_json" in header
 
     rows = _read_csv(SAMPLE)
-    assert len(rows) == 3
+    assert len(rows) == 4
     assert list(rows[0]) == header
     assert {row["task_type"] for row in rows} == {"voice_clone", "asr_transcription", "text_to_text"}
     assert {row["load_generator"] for row in rows} == {
@@ -45,6 +45,16 @@ def test_template_and_sample_schema():
         "hf-open-asr-leaderboard",
         "guidellm",
     }
+    audio_guidellm = [
+        row
+        for row in rows
+        if row["task_type"] == "asr_transcription" and row["load_generator"] == "guidellm"
+    ]
+    assert len(audio_guidellm) == 1
+    assert audio_guidellm[0]["input_modality"] == "audio"
+    assert audio_guidellm[0]["output_modality"] == "text"
+    assert audio_guidellm[0]["rtfx"]
+    assert not audio_guidellm[0]["wer"]
     for row in rows:
         assert row["model"]
         assert row["task_type"]

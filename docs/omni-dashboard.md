@@ -21,7 +21,7 @@ Included in the repo:
 | File | Purpose |
 |---|---|
 | `datasets/omni/consolidated_dashboard_omni_template.csv` | Header-only 166-column template |
-| `datasets/omni/consolidated_dashboard_omni_sample.csv` | Sanitized TTS, ASR, and text example rows |
+| `datasets/omni/consolidated_dashboard_omni_sample.csv` | Sanitized TTS, ASR (HF harness), audio-to-text (GuideLLM), and text example rows |
 | `datasets/omni/consolidated_dashboard_omni_metadata.example.json` | Example defaults for the converter |
 
 The sample uses only `example/...` models and `demo` metadata. Do not commit production hostnames, deployment IDs, MLflow IDs, private image digests, or credentials.
