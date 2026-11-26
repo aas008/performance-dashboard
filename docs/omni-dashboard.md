@@ -177,7 +177,8 @@ The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is 
 - A RHAIIS-style context title (GPU / task / dataset), a **Comparing:** line, and a “How are these calculated?” popover.
 - Matches rows on model, task type, concurrency, load generator, TP, and accelerator. Dataset is included when both versions carry it.
 - A model-level summary table with 🟢 Better / 🟡 Flat / 🔴 Worse cells. Each cell is the geometric mean of per-concurrency deltas.
-- Summary cards, a `plotly_white_light` delta bar chart, a detailed table, and a CSV download for the selected metric.
+- A Statistic selector (Mean / Median / P95 / P99 where available) applies to the table columns. Throughput, WER, RTFx, and transcription throughput remain single values.
+- One summary table plus a CSV download; no separate metric selector or chart.
 
 **Filtered Data** uses the same numbered filters and adds a CSV download. Other RHAIIS sections remain visible and show a placeholder until they are implemented.
 

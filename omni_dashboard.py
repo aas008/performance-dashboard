@@ -1073,33 +1073,6 @@ def _family_statistics(
     ]
 
 
-def _family_available(
-    family: str, base_df: pd.DataFrame, comparison_df: pd.DataFrame
-) -> bool:
-    config = COMPARE_METRIC_FAMILIES[family]
-    if "columns" in config:
-        return bool(_family_statistics(family, base_df, comparison_df))
-    column = config["column"]
-    return base_df[column].notna().any() and comparison_df[column].notna().any()
-
-
-def _family_available_for_statistic(
-    family: str,
-    base_df: pd.DataFrame,
-    comparison_df: pd.DataFrame,
-    statistic: str | None,
-) -> bool:
-    config = COMPARE_METRIC_FAMILIES[family]
-    if "columns" not in config:
-        return _family_available(family, base_df, comparison_df)
-    column = config["columns"].get(statistic)
-    return bool(
-        column
-        and base_df[column].notna().any()
-        and comparison_df[column].notna().any()
-    )
-
-
 def _summary_statistics(
     base_df: pd.DataFrame, comparison_df: pd.DataFrame
 ) -> list:
@@ -1147,20 +1120,6 @@ def _default_compare_statistic(
     if "Mean" in statistics:
         return "Mean"
     return statistics[0]
-
-
-def _family_column(family: str, statistic: str | None) -> str | None:
-    config = COMPARE_METRIC_FAMILIES[family]
-    if "columns" in config:
-        return config["columns"].get(statistic)
-    return config["column"]
-
-
-def _family_label(family: str, statistic: str | None) -> str:
-    config = COMPARE_METRIC_FAMILIES[family]
-    if "columns" in config and statistic:
-        return f"{family} ({statistic})"
-    return family
 
 
 def _aggregate_delta(detail: pd.DataFrame) -> float:
@@ -1261,21 +1220,6 @@ def _model_comparison_summary(
     return summary
 
 
-def _default_compare_family(frame: pd.DataFrame, options: list) -> str:
-    tasks = set(frame["task_type"].dropna().astype(str))
-    if tasks and tasks <= {"asr_transcription"}:
-        if "WER" in options and frame["wer"].notna().any():
-            return "WER"
-        if "RTFx" in options:
-            return "RTFx"
-    if tasks & {"voice_clone", "default_voice", "voice_design"}:
-        if "Audio RTF" in options:
-            return "Audio RTF"
-    if "Request throughput" in options:
-        return "Request throughput"
-    return options[0] if options else ""
-
-
 def _compare_versions(df: pd.DataFrame):
     st.subheader("⚖️ Compare Versions")
     st.markdown(
@@ -1353,9 +1297,7 @@ def _compare_versions(df: pd.DataFrame):
             label for label in st.session_state[task_key] if label in task_labels
         ]
 
-    col_task, col_loadgen, col_models, col_stat, col_metric = st.columns(
-        [2, 2, 2, 1.3, 1.7]
-    )
+    col_task, col_loadgen, col_models, col_stat = st.columns([2, 2, 2, 1.3])
     with col_task:
         selected_task_labels = st.multiselect(
             "Tasks",
@@ -1487,50 +1429,6 @@ def _compare_versions(df: pd.DataFrame):
         with col_stat:
             st.caption("Statistic: single value")
 
-    metric_options = [
-        family
-        for family in COMPARE_METRIC_FAMILIES
-        if _family_available_for_statistic(family, base, comparison, statistic)
-    ]
-    if not metric_options:
-        st.warning(
-            f"No comparable metrics found between {baseline} and {candidate} "
-            "for the selected tasks, load generator, models, and statistic."
-        )
-        return
-
-    preferred_family = _default_compare_family(base, metric_options)
-    metric_index = (
-        metric_options.index(preferred_family)
-        if preferred_family in metric_options
-        else 0
-    )
-    metric_key = _selection_key(
-        "omni_compare_metric",
-        baseline,
-        candidate,
-        selected_tasks,
-        models,
-        [load_generator],
-        [statistic or "single"],
-    )
-    if st.session_state.get(metric_key) not in metric_options:
-        st.session_state.pop(metric_key, None)
-    with col_metric:
-        metric_family = st.selectbox(
-            "Metric",
-            metric_options,
-            index=metric_index,
-            key=metric_key,
-        )
-
-    metric = _family_column(metric_family, statistic)
-    if not metric:
-        st.warning("The selected metric does not have the chosen statistic.")
-        return
-    metric_label = _family_label(metric_family, statistic)
-    direction = COMPARE_METRIC_FAMILIES[metric_family]["direction"]
-
     base_concurrency = set(base["concurrency_label"].dropna().astype(str))
     comparison_concurrency = set(
         comparison["concurrency_label"].dropna().astype(str)
@@ -1600,108 +1498,22 @@ def _compare_versions(df: pd.DataFrame):
         )
     )
 
-    detail = _comparison_table(base, comparison, metric, direction)
-    if detail.empty:
-        st.warning(
-            "No matching model/task/dataset/concurrency rows found for both versions."
-        )
-        return
-
     summary = _model_comparison_summary(base, comparison, statistic)
     st.subheader("Version comparison summary")
     if summary.empty:
         st.info(
             "No metric pairs are available for these versions and concurrency levels."
         )
-    else:
-        st.dataframe(summary, use_container_width=True, hide_index=True)
-        st.caption("🟢 Better · 🟡 Flat (±1%) · 🔴 Worse")
-
-    better = int((detail["verdict"] == "Better").sum())
-    worse = int((detail["verdict"] == "Worse").sum())
-    flat = int((detail["verdict"] == "Flat").sum())
-    summary_delta = _aggregate_delta(detail)
-
-    st.subheader(f"Selected metric: {metric_label}")
-    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-    metric_col1.metric("Comparisons", len(detail))
-    metric_col2.metric("Better", better)
-    metric_col3.metric("Worse", worse)
-    metric_col4.metric(
-        "Summary delta",
-        f"{summary_delta:+.1f}%" if pd.notna(summary_delta) else "n/a",
-    )
+        return
+    st.dataframe(summary, use_container_width=True, hide_index=True)
     st.caption(
-        f"Flat: {flat}. The card and summary table use the geometric mean of "
-        "per-concurrency deltas. The chart below shows each concurrency level; "
-        "verdicts account for metric direction, so a negative delta is better "
-        "for lower-is-better metrics."
+        "🟢 Better · 🟡 Flat (±1%) · 🔴 Worse. Cells use the geometric mean of "
+        "per-concurrency deltas for the selected statistic. Verdicts account for "
+        "metric direction, so a negative delta is better for lower-is-better metrics."
     )
-
-    fig = px.bar(
-        detail.sort_values("label"),
-        x="label",
-        y="delta_pct",
-        color="verdict",
-        color_discrete_map={
-            "Better": "#2e7d32",
-            "Worse": "#c62828",
-            "Flat": "#9e9e9e",
-            "n/a": "#bdbdbd",
-        },
-        custom_data=[
-            "model",
-            "task_type",
-            "concurrency_label",
-            "baseline",
-            "comparison",
-        ],
-        title=f"<b>{metric_label}: {candidate} vs {baseline}</b>",
-        template="plotly_white_light",
-    )
-    fig.add_hline(y=0, line_dash="dash", line_color="#6b7280")
-    fig.update_traces(marker_line_color="white", marker_line_width=1)
-    for trace in fig.data:
-        trace.hovertemplate = (
-            "Model: %{customdata[0]}<br>"
-            "Task: %{customdata[1]}<br>"
-            "Concurrency: %{customdata[2]}<br>"
-            "Baseline: %{customdata[3]}<br>"
-            "Comparison: %{customdata[4]}<br>"
-            "Delta: %{y:.1f}%<extra></extra>"
-        )
-    fig.update_layout(
-        height=560,
-        margin={"l": 80, "r": 250, "t": 110, "b": 150},
-        xaxis_tickangle=-35,
-        xaxis_title="",
-        yaxis_title="Delta vs baseline (%)",
-        legend_title_text="Result",
-    )
-    st.plotly_chart(fig, use_container_width=True, theme=None, key="omni_compare_chart")
-
-    st.subheader("Per-concurrency details")
-    detail_columns = ["model", "task_type", "concurrency_label"]
-    for key in ("dataset", "load_generator", "tp", "accelerator"):
-        if key in detail.columns and detail[key].nunique() > 1:
-            detail_columns.append(key)
-    detail_columns.extend(["baseline", "comparison", "delta_pct", "verdict"])
-    display = detail[detail_columns].copy()
-    display["baseline"] = display["baseline"].round(4)
-    display["comparison"] = display["comparison"].round(4)
-    display["delta_pct"] = display["delta_pct"].round(2)
-    display = display.rename(
-        columns={
-            "baseline": f"Baseline ({baseline})",
-            "comparison": f"Comparison ({candidate})",
-            "delta_pct": "Delta %",
-            "verdict": "Result",
-        }
-    )
-    st.dataframe(display, use_container_width=True, hide_index=True)
     st.download_button(
-        "Download comparison CSV",
-        data=detail[detail_columns].to_csv(index=False).encode("utf-8"),
+        "Download comparison summary CSV",
+        data=summary.to_csv(index=False).encode("utf-8"),
         file_name="omni_version_comparison.csv",
         mime="text/csv",
     )

@@ -246,7 +246,7 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - Version defaults prefer the most recent version as the comparison and the earlier version with the longest common prefix as the baseline (for example, `vllm-omni-3.5-ea2` → `vllm-omni-3.6.0-ga`).
 - Rows are matched on model, task type, concurrency, load generator, TP, and accelerator. Dataset is included when both versions provide it, so legacy rows without a dataset still match.
 - Repeated rows per key are averaged before comparison. Delta is the raw percent change; verdicts account for higher-is-better vs lower-is-better metrics with a 1% flat threshold.
-- Outputs: model-level summary table, comparison cards, a `plotly_white_light` delta bar chart, a detailed table, and CSV download for the selected metric.
+- Output: one model-level, all-metric summary table plus a CSV download. There is no separate metric selector or chart.
 - Tested with the real data:
   - `vllm-omni-3.5-ea2` vs `vllm-omni-3.6.0-ga`: 4 comparisons across c1/c4/c8/c16, all Better for throughput and RTF.
   - Swap: all verdicts flipped to Worse.
@@ -285,3 +285,10 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - The page now uses every common concurrency level for the selected versions, tasks, load generator, and models.
 - A caption lists the concurrency levels in use.
 - This keeps the page simpler and matches the “compare everything common” behavior.
+
+## Checkpoint 12 — table-only Compare Versions
+
+- Removed the Metric selector from the top controls.
+- Removed the selected-metric cards, delta bar chart, and per-concurrency details table.
+- Compare Versions is now a single all-metric summary table plus CSV download, matching the RHAIIS table-first pattern.
+- The Statistic selector still controls Mean / Median / P95 / P99 for the stats-based columns.
