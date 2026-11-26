@@ -276,25 +276,12 @@ def _main_filters(df: pd.DataFrame) -> pd.DataFrame:
         if models:
             filtered = filtered[filtered["model"].isin(models)]
 
-        col7, col8 = st.columns(2)
-        with col7:
-            tps = _multiselect(
-                "7️⃣ Select TP Size(s)", _values(filtered, "tp"),
-                _selection_key("omni_tp", io_pairs, tasks, generators, models),
-            )
+        tps = _multiselect(
+            "7️⃣ Select TP Size(s)", _values(filtered, "tp"),
+            _selection_key("omni_tp", io_pairs, tasks, generators, models),
+        )
         if tps:
             filtered = filtered[filtered["tp"].isin(tps)]
-        with col8:
-            conc_options = sorted(
-                df["concurrency_label"].dropna().unique(),
-                key=lambda value: (value == "n/a", float(value) if value != "n/a" else 0),
-            )
-            if conc_options:
-                selected = st.multiselect(
-                    "8️⃣ Select Concurrency", conc_options,
-                    default=conc_options, key="omni_concurrency",
-                )
-                filtered = filtered[filtered["concurrency_label"].isin(selected)]
 
     return filtered
 

@@ -113,7 +113,7 @@ The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is 
 
 **Performance Plots**:
 
-- RHAIIS-style numbered filters in the main content: Accelerator → Version → Input/Output → Task → Load Generator → Model → TP → Concurrency.
+- RHAIIS-style numbered filters in the main content: Accelerator → Version → Input/Output → Task → Load Generator → Model → TP. Concurrency is not filtered here; charts include every available concurrency value for the selected data.
 - `Select X-Axis`: `Concurrency` or `Model`.
 - `Select Y-Axis`: request/audio/token throughput, audio RTF/TTFP/underrun, text TTFT/TPOT/ITL/E2EL, WER, RTFx, or transcription throughput.
 - `Show concurrency up to` ceiling.

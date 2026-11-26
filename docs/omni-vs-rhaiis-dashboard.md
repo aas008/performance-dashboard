@@ -80,7 +80,8 @@ Proposed sidebar/main filter order:
 5. Select Load Generator(s)
 6. Select Model(s) — **auto-populated from 3/4/5**
 7. Select TP Size(s) — if more than one TP exists
-8. Concurrency
+
+Concurrency is **not** a filter. Performance Plots shows every available concurrency value for the selected data and offers a chart-level `Show concurrency up to` ceiling instead.
 
 Auto-fill rule:
 
@@ -95,7 +96,7 @@ Auto-fill rule:
 1. Open Omni Dashboard.
 2. Choose `text → audio`.
 3. Models auto-fill to TTS models with data.
-4. Choose model/version/accelerator and concurrency.
+4. Choose model/version/accelerator; the chart shows every available concurrency value.
 5. Review Throughput and Speech Out.
 6. Check audio TTFP, RTF (lower is better), underrun, and audio throughput.
 7. Click chart points/select lines; inspect the filtered rows; download CSV if needed.
@@ -126,7 +127,7 @@ Auto-fill rule:
 
 1. ~~**Left panel:** keep the RHAIIS navigation in Omni and move filters into main content, or keep filter-only sidebar?~~ **Closed — keep the RHAIIS navigation; filters moved into main content.**
 2. **Pages:** which RHAIIS pages should Omni clone — Overview, Performance Plots, Compare Versions, Performance Trends, Model Comparison, Filtered Data? Which can be left out for now? *Implemented so far: Overview, Performance Plots, Filtered Data.*
-3. **Filter order:** is the proposed order (Accelerator → Version → Input/Output → Task → Load gen → Model → TP → Concurrency) correct, or should Input/Output come first for TTS/ASR users?
+3. **Filter order:** is the proposed order (Accelerator → Version → Input/Output → Task → Load gen → Model → TP) correct, or should Input/Output come first for TTS/ASR users?
 4. **Auto-fill semantics:** auto-select all available models, or only narrow the options and let the user choose?
 5. **Modality vs Input/Output:** replace `Modality` with the input→output pair, or keep both?
 6. **TP:** include TP in the Omni UI? Current data is all TP=1.
@@ -163,7 +164,7 @@ Auto-fill rule:
 
 Implemented in `omni_dashboard.py`:
 
-- RHAIIS-style numbered filter order: Accelerator → Version → Input/Output → Task → Load Generator → Model → TP → Concurrency.
+- RHAIIS-style numbered filter order: Accelerator → Version → Input/Output → Task → Load Generator → Model → TP. (The concurrency filter added here was removed in Checkpoint 5.)
 - Cascading option sets: selecting an input/output pair narrows task, load generator, and model options.
 - Model auto-fill: all models with data for the selected pair/task/load generator are selected by default.
 - Point/box/lasso selection on line charts and point selection on ASR bars.
@@ -210,3 +211,9 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
   - switching Y-axis to `Audio RTF P95` re-renders the chart and prunes concurrency options;
   - `Clear comparison` resets the selection;
   - `WER` with `Concurrency` X-axis shows a clear no-data message; switching X-axis to `Model` renders the offline ASR point.
+
+## Checkpoint 5 — concurrency filter removed
+
+- Removed `8️⃣ Select Concurrency` from the main filter block. All concurrency values for the selected data now flow into Performance Plots.
+- The chart-level `Show concurrency up to` selector remains for limiting the visible range.
+- Filter steps are now Accelerator → Version → Input/Output → Task → Load Generator → Model → TP.
