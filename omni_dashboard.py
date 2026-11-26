@@ -75,6 +75,18 @@ IO_PAIR_LABELS = {
     ("text", "text"): "Text (text → text)",
 }
 
+TASK_TYPE_LABELS = {
+    "voice_clone": "Voice Clone",
+    "default_voice": "Default Voice",
+    "voice_design": "Voice Design",
+    "asr_transcription": "ASR / STT",
+    "text_to_text": "Text",
+}
+
+
+def _task_label(value: str) -> str:
+    return TASK_TYPE_LABELS.get(str(value), str(value))
+
 PLOT_CUSTOM_DATA = [
     "model",
     "runtime_version",
@@ -149,6 +161,7 @@ OMNI_COMPARE_SUMMARY_METRICS = {
     "TPOT median": "TPOT median (ms)",
     "WER": "WER",
     "RTFx": "RTFx",
+    "STT utt/s": "Transcription throughput (utt/s)",
 }
 
 # Same navigation groups/labels as the RHAIIS shell. Pages that are not yet
@@ -843,7 +856,49 @@ def _comparison_table(
     metric: str,
     direction: str,
 ) -> pd.DataFrame:
-    keys = _comparison_keys(base_df, comparison_df)
+    if (
+        "task_type" not in base_df.columns
+        or "task_type" not in comparison_df.columns
+    ):
+        return _comparison_table_for_task(
+            base_df,
+            comparison_df,
+            metric,
+            direction,
+            _comparison_keys(base_df, comparison_df),
+        )
+
+    tasks = sorted(
+        set(base_df["task_type"].dropna())
+        | set(comparison_df["task_type"].dropna())
+    )
+    frames = []
+    for task in tasks:
+        task_base = base_df[base_df["task_type"] == task]
+        task_comparison = comparison_df[comparison_df["task_type"] == task]
+        if task_base.empty or task_comparison.empty:
+            continue
+        detail = _comparison_table_for_task(
+            task_base,
+            task_comparison,
+            metric,
+            direction,
+            _comparison_keys(task_base, task_comparison),
+        )
+        if not detail.empty:
+            frames.append(detail)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
+def _comparison_table_for_task(
+    base_df: pd.DataFrame,
+    comparison_df: pd.DataFrame,
+    metric: str,
+    direction: str,
+    keys: list,
+) -> pd.DataFrame:
     base = base_df.dropna(subset=[metric]).copy()
     comparison = comparison_df.dropna(subset=[metric]).copy()
     if base.empty or comparison.empty:
@@ -872,6 +927,9 @@ def _comparison_table(
     merged["comparison"] = merged.pop(f"{metric}_comparison")
     for key in keys:
         merged[key] = merged.pop(f"{key}_baseline")
+        comparison_column = f"{key}_comparison"
+        if comparison_column in merged.columns:
+            merged.pop(comparison_column)
     merged = merged.dropna(subset=["baseline", "comparison"])
 
     denominator = merged["baseline"].abs()
@@ -922,10 +980,12 @@ def _aggregate_delta(detail: pd.DataFrame) -> float:
 def _model_comparison_summary(
     base_df: pd.DataFrame, comparison_df: pd.DataFrame
 ) -> pd.DataFrame:
-    summary_keys = [
-        key
-        for key in _comparison_keys(base_df, comparison_df)
-        if key != "concurrency_label"
+    core_group_keys = [
+        "model",
+        "task_type",
+        "load_generator",
+        "tp",
+        "accelerator",
     ]
     metric_labels = [
         (short, label)
@@ -944,15 +1004,16 @@ def _model_comparison_summary(
         detail = _comparison_table(base_df, comparison_df, metric, direction)
         if detail.empty:
             continue
+        group_keys = [key for key in core_group_keys if key in detail.columns]
         detail["_group"] = (
-            detail[summary_keys].agg(" | ".join, axis=1)
-            if summary_keys
+            detail[group_keys].agg(" | ".join, axis=1)
+            if group_keys
             else "all"
         )
         for group, subset in detail.groupby("_group", sort=False):
             if group not in groups:
                 meta = subset.iloc[0]
-                groups[group] = {key: meta[key] for key in summary_keys}
+                groups[group] = {key: meta[key] for key in group_keys}
             delta = _aggregate_delta(subset)
             if pd.isna(delta):
                 cells[(group, short)] = "⚪ N/A"
@@ -973,7 +1034,7 @@ def _model_comparison_summary(
             model += f" (TP={tp})"
         row = {"Model": model}
         if "task_type" in meta:
-            row["Task"] = meta["task_type"]
+            row["Task"] = _task_label(meta["task_type"])
         if "load_generator" in meta:
             row["Load generator"] = meta["load_generator"]
         if "accelerator" in meta:
@@ -1051,23 +1112,62 @@ def _compare_versions(df: pd.DataFrame):
 
     base_all = df[df["runtime_version"] == baseline].copy()
     comparison_all = df[df["runtime_version"] == candidate].copy()
+
+    common_tasks = sorted(
+        set(base_all["task_type"].dropna())
+        & set(comparison_all["task_type"].dropna())
+    )
+    if not common_tasks:
+        st.warning(
+            f"No common tasks found between {baseline} and {candidate}."
+        )
+        return
+    task_options = [(task, _task_label(task)) for task in common_tasks]
+    task_labels = [label for _, label in task_options]
+    task_key = _selection_key("omni_compare_tasks", baseline, candidate)
+    if task_key in st.session_state:
+        st.session_state[task_key] = [
+            label for label in st.session_state[task_key] if label in task_labels
+        ]
+
+    col_task, col_models, col_metric = st.columns([2, 2, 2])
+    with col_task:
+        selected_task_labels = st.multiselect(
+            "Task types",
+            task_labels,
+            default=task_labels,
+            key=task_key,
+        )
+    if not selected_task_labels:
+        st.info("Select at least one task type.")
+        return
+    selected_tasks = [
+        task for task, label in task_options if label in selected_task_labels
+    ]
+
+    base_tasks = base_all[base_all["task_type"].isin(selected_tasks)]
+    comparison_tasks = comparison_all[
+        comparison_all["task_type"].isin(selected_tasks)
+    ]
     common_models = sorted(
-        set(base_all["model"].dropna()) & set(comparison_all["model"].dropna())
+        set(base_tasks["model"].dropna()) & set(comparison_tasks["model"].dropna())
     )
     if not common_models:
         st.warning(
-            f"No common models found between {baseline} and {candidate}."
+            f"No common models found between {baseline} and {candidate} "
+            "for the selected tasks."
         )
         return
 
-    model_key = _selection_key("omni_compare_models", baseline, candidate)
+    model_key = _selection_key(
+        "omni_compare_models", baseline, candidate, selected_tasks
+    )
     if model_key in st.session_state:
         st.session_state[model_key] = [
             model for model in st.session_state[model_key] if model in common_models
         ]
 
-    col3, col4 = st.columns([3, 2])
-    with col3:
+    with col_models:
         models = st.multiselect(
             "Models",
             common_models,
@@ -1078,8 +1178,8 @@ def _compare_versions(df: pd.DataFrame):
         st.info("Select at least one model.")
         return
 
-    base = base_all[base_all["model"].isin(models)]
-    comparison = comparison_all[comparison_all["model"].isin(models)]
+    base = base_tasks[base_tasks["model"].isin(models)]
+    comparison = comparison_tasks[comparison_tasks["model"].isin(models)]
     metric_options = [
         label
         for label, column in OMNI_METRICS.items()
@@ -1088,7 +1188,7 @@ def _compare_versions(df: pd.DataFrame):
     if not metric_options:
         st.warning(
             f"No comparable metrics found between {baseline} and {candidate} "
-            "for the selected models."
+            "for the selected tasks and models."
         )
         return
 
@@ -1099,9 +1199,9 @@ def _compare_versions(df: pd.DataFrame):
         else 0
     )
     metric_key = _selection_key(
-        "omni_compare_metric", baseline, candidate, models
+        "omni_compare_metric", baseline, candidate, selected_tasks, models
     )
-    with col4:
+    with col_metric:
         metric_label = st.selectbox(
             "Metric",
             metric_options,
@@ -1150,17 +1250,15 @@ def _compare_versions(df: pd.DataFrame):
         ("dataset", "Dataset"),
     ):
         if key in base.columns and key in comparison.columns:
-            values = sorted(
-                set(base[key].dropna().astype(str))
-                & set(comparison[key].dropna().astype(str))
-            )
-            values = [
-                value
-                for value in values
-                if value.lower() not in ("", "nan", "none", "n/a")
-            ]
-            if len(values) == 1:
-                context_parts.append(f"{label}: {values[0]}")
+            raw_values = pd.concat([base[key], comparison[key]]).astype(str).str.strip()
+            normalized = raw_values.str.lower()
+            if normalized.isin(["", "nan", "none", "n/a"]).any():
+                continue
+            if raw_values.nunique() == 1:
+                value = raw_values.iloc[0]
+                context_parts.append(
+                    f"{label}: {_task_label(value) if key == 'task_type' else value}"
+                )
 
     title_col, popover_col = st.columns([5, 1])
     with title_col:

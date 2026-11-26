@@ -22,9 +22,30 @@ Included in the repo:
 |---|---|
 | `datasets/omni/consolidated_dashboard_omni_template.csv` | Header-only 165-column template |
 | `datasets/omni/consolidated_dashboard_omni_sample.csv` | Sanitized TTS, ASR (HF harness), audio-to-text (GuideLLM), and text example rows |
+| `datasets/omni/consolidated_dashboard_omni_dummy_stt.csv` | 8 sanitized ASR/STT test rows across two versions (GuideLLM c1/c8/c32 plus offline WER) |
+| `datasets/omni/logs/dummy-stt-*.log` | Matching sanitized STT server logs for View Logs |
 | `datasets/omni/consolidated_dashboard_omni_metadata.example.json` | Example defaults for the converter |
 
 The sample uses only `example/...` models and `demo` metadata. Do not commit production hostnames, deployment IDs, MLflow IDs, private image digests, or credentials.
+
+## Dummy STT test data
+
+`datasets/omni/consolidated_dashboard_omni_dummy_stt.csv` exercises the ASR/STT path without a real run:
+
+- Model `example/asr-2b`, versions `vllm-omni-3.5-ea2` and `vllm-omni-3.6.0-ga`.
+- GuideLLM online rows at concurrency 1, 8, and 32 with RTFx and transcription throughput.
+- Offline WER rows for both versions using the HF ASR leaderboard harness.
+- Matching logs under `datasets/omni/logs/` for View Logs.
+
+Run the dashboard against it with:
+
+```bash
+OMNI_CSV_PATH=datasets/omni/consolidated_dashboard_omni_dummy_stt.csv \
+OMNI_LOG_DIR=datasets/omni/logs \
+streamlit run dashboard.py
+```
+
+To test STT alongside TTS data, concatenate the dummy rows with another consolidated CSV that has the same 165-column header.
 
 ## Row granularity
 
@@ -150,7 +171,8 @@ The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is 
 
 **Compare Versions**:
 
-- Baseline and comparison version selectors with a swap button, plus model, metric, and concurrency selectors.
+- Baseline and comparison version selectors with a swap button, plus task-type, model, metric, and concurrency selectors.
+- The task selector cascades into model and metric options, so TTS and ASR/STT tasks are compared separately rather than mixed.
 - A RHAIIS-style context title (GPU / task / dataset), a **Comparing:** line, and a “How are these calculated?” popover.
 - Matches rows on model, task type, concurrency, load generator, TP, and accelerator. Dataset is included when both versions carry it.
 - A model-level summary table with 🟢 Better / 🟡 Flat / 🔴 Worse cells. Each cell is the geometric mean of per-concurrency deltas.

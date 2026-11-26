@@ -15,6 +15,7 @@ SAMPLE = OMNI_DIR / "consolidated_dashboard_omni_sample.csv"
 METADATA = OMNI_DIR / "consolidated_dashboard_omni_metadata.example.json"
 CONVERTER = ROOT / "manual_runs" / "scripts" / "build_consolidated_omni_csv.py"
 DEMO_LOG = OMNI_DIR / "logs" / "demo-tts-c1.log"
+DUMMY_STT = OMNI_DIR / "consolidated_dashboard_omni_dummy_stt.csv"
 
 REQUIRED = {"model", "task_type", "benchmark_tool", "load_generator"}
 
@@ -85,6 +86,25 @@ def test_demo_log_matches_sample_run():
     assert "demo-tts-c1" in {row["run_name"] for row in rows}
     assert DEMO_LOG.exists()
     assert "Application startup complete." in DEMO_LOG.read_text()
+
+
+def test_dummy_stt_fixture():
+    rows = _read_csv(DUMMY_STT)
+    assert len(rows) == 8
+    assert list(rows[0]) == _header(TEMPLATE)
+    assert {row["task_type"] for row in rows} == {"asr_transcription"}
+    assert {row["input_modality"] for row in rows} == {"audio"}
+    assert {row["output_modality"] for row in rows} == {"text"}
+    assert {row["runtime_version"] for row in rows} == {
+        "vllm-omni-3.5-ea2",
+        "vllm-omni-3.6.0-ga",
+    }
+    assert {row["load_generator"] for row in rows} == {"guidellm", "offline"}
+    offline = [row for row in rows if row["load_generator"] == "offline"]
+    assert len(offline) == 2
+    assert all(row["wer"] for row in offline)
+    assert (OMNI_DIR / "logs" / "dummy-stt-35ga-c8.log").exists()
+    assert (OMNI_DIR / "logs" / "dummy-stt-36ga-c8.log").exists()
 
 
 def test_converter_smoke(tmp_path):

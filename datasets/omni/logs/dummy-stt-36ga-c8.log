@@ -1,0 +1,21 @@
+2026-11-23 21:00:00,000 INFO [dummy-stt] Starting vLLM server for example/asr-2b
+2026-11-23 21:00:00,120 INFO [dummy-stt] Runtime: vLLM 0.30.0
+2026-11-23 21:00:00,240 INFO [dummy-stt] Loading tokenizer and audio feature extractor
+2026-11-23 21:00:00,480 INFO [dummy-stt] Initializing model on GPU 0
+2026-11-23 21:00:01,100 INFO [dummy-stt] max_num_seqs=64 gpu_memory_utilization=0.90
+2026-11-23 21:00:01,760 INFO [dummy-stt] Warmup transcription completed in 84.2 ms
+2026-11-23 21:00:02,080 INFO [dummy-stt] Application startup complete.
+2026-11-23 21:00:05,000 INFO [dummy-stt] benchmark start: num_utterances=100 max_concurrency=8 request_rate=inf
+2026-11-23 21:00:05,410 INFO [dummy-stt] transcription completed: audio_duration_s=7.50 latency_ms=780.0 rtfx=63.25
+2026-11-23 21:00:05,850 INFO [dummy-stt] transcription completed: audio_duration_s=7.48 latency_ms=792.1 rtfx=62.91
+2026-11-23 21:00:06,290 INFO [dummy-stt] transcription completed: audio_duration_s=7.52 latency_ms=771.4 rtfx=64.02
+2026-11-23 21:00:06,730 INFO [dummy-stt] transcription completed: audio_duration_s=7.49 latency_ms=788.6 rtfx=63.10
+2026-11-23 21:00:07,170 INFO [dummy-stt] transcription completed: audio_duration_s=7.51 latency_ms=775.3 rtfx=63.71
+2026-11-23 21:00:07,610 INFO [dummy-stt] transcription completed: audio_duration_s=7.50 latency_ms=783.9 rtfx=63.37
+2026-11-23 21:00:08,050 INFO [dummy-stt] transcription completed: audio_duration_s=7.47 latency_ms=795.2 rtfx=62.77
+2026-11-23 21:00:08,490 INFO [dummy-stt] transcription completed: audio_duration_s=7.53 latency_ms=769.8 rtfx=64.11
+2026-11-23 21:00:08,930 INFO [dummy-stt] transcription completed: audio_duration_s=7.50 latency_ms=781.5 rtfx=63.45
+2026-11-23 21:00:09,370 INFO [dummy-stt] transcription completed: audio_duration_s=7.49 latency_ms=786.7 rtfx=63.19
+2026-11-23 21:00:09,810 INFO [dummy-stt] benchmark complete: completed=100 failed=0 duration_s=10.71
+2026-11-23 21:00:09,820 INFO [dummy-stt] request_throughput=9.33 req/s rtfx=63.25
+2026-11-23 21:00:09,830 INFO [dummy-stt] Dummy STT log end.

@@ -239,7 +239,8 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 
 ## Checkpoint 8 — Compare Versions implemented
 
-- Added baseline/comparison version selectors with a swap button, plus model, metric, and concurrency selectors.
+- Added baseline/comparison version selectors with a swap button, plus task-type, model, metric, and concurrency selectors.
+- The task-type selector cascades into model and metric options. Rows are always matched on `task_type`, so TTS and ASR/STT tasks are compared separately and never mixed.
 - Added the RHAIIS-style context title (`GPU / Task / Dataset`), **Comparing:** line, and “How are these calculated?” popover.
 - Added a model-level summary table with 🟢 Better / 🟡 Flat / 🔴 Worse cells. Each cell is the geometric mean of per-concurrency deltas; the table is the primary output, like RHAIIS.
 - Version defaults prefer the most recent version as the comparison and the earlier version with the longest common prefix as the baseline (for example, `vllm-omni-3.5-ea2` → `vllm-omni-3.6.0-ga`).
@@ -253,3 +254,19 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
   - `vllm-omni-3.5-ea2` vs `vllm-omni-v0.24.0`: 5 models and 25 comparisons rendered in the summary table.
   - Concurrency subset: removing c1 and c25 reduced the comparison count to 15.
   - Same-version and one-version datasets show clear warnings.
+
+## Checkpoint 9 — task selector and dummy STT data
+
+- Added a **Task types** multiselect to Compare Versions. It cascades into model and metric options, so TTS and ASR/STT comparisons are isolated.
+- Task labels are human-readable: Voice Clone, Default Voice, Voice Design, ASR / STT, Text.
+- Fixed comparison key selection to run **per task**, so a dataset present on only one side no longer breaks matching for another task. TTS and ASR rows now coexist correctly in one comparison.
+- Added `datasets/omni/consolidated_dashboard_omni_dummy_stt.csv`:
+  - `example/asr-2b` across `vllm-omni-3.5-ea2` and `vllm-omni-3.6.0-ga`.
+  - GuideLLM online rows at c1/c8/c32 with RTFx and transcription throughput.
+  - Offline WER rows for both versions.
+  - Matching `dummy-stt-*.log` files under `datasets/omni/logs/`.
+- Tested:
+  - All tasks selected: summary shows TTS and ASR rows separately.
+  - ASR/STT only: model auto-narrows to `example/asr-2b`, metric defaults to WER, title shows `Task: ASR / STT | Dataset: librispeech`.
+  - Dummy STT log loads end to end in View Logs.
+  - Fixture test validates 8 rows, two versions, online/offline load generators, and log files.
