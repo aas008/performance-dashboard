@@ -257,8 +257,8 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 
 ## Checkpoint 9 — task selector and dummy STT data
 
-- Added a **Task types** multiselect to Compare Versions. It cascades into model and metric options, so TTS and ASR/STT comparisons are isolated.
-- Task labels are human-readable: Voice Clone, Default Voice, Voice Design, ASR / STT, Text.
+- Added a **Tasks** multiselect to Compare Versions. It cascades into model and metric options, so TTS and ASR/STT comparisons are isolated.
+- Task labels are modality-explicit and ordered: `TTS - Voice Clone`, `TTS - Default Voice`, `TTS - Voice Design`, `ASR / STT - Transcription`, `Text - Text generation`. ASR/STT has a single transcription task.
 - Fixed comparison key selection to run **per task**, so a dataset present on only one side no longer breaks matching for another task. TTS and ASR rows now coexist correctly in one comparison.
 - Added `datasets/omni/consolidated_dashboard_omni_dummy_stt.csv`:
   - `example/asr-2b` across `vllm-omni-3.5-ea2` and `vllm-omni-3.6.0-ga`.

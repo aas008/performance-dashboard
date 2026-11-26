@@ -76,12 +76,20 @@ IO_PAIR_LABELS = {
 }
 
 TASK_TYPE_LABELS = {
-    "voice_clone": "Voice Clone",
-    "default_voice": "Default Voice",
-    "voice_design": "Voice Design",
-    "asr_transcription": "ASR / STT",
-    "text_to_text": "Text",
+    "voice_clone": "TTS - Voice Clone",
+    "default_voice": "TTS - Default Voice",
+    "voice_design": "TTS - Voice Design",
+    "asr_transcription": "ASR / STT - Transcription",
+    "text_to_text": "Text - Text generation",
 }
+
+TASK_TYPE_ORDER = [
+    "voice_clone",
+    "default_voice",
+    "voice_design",
+    "asr_transcription",
+    "text_to_text",
+]
 
 
 def _task_label(value: str) -> str:
@@ -1115,7 +1123,13 @@ def _compare_versions(df: pd.DataFrame):
 
     common_tasks = sorted(
         set(base_all["task_type"].dropna())
-        & set(comparison_all["task_type"].dropna())
+        & set(comparison_all["task_type"].dropna()),
+        key=lambda task: (
+            TASK_TYPE_ORDER.index(task)
+            if task in TASK_TYPE_ORDER
+            else len(TASK_TYPE_ORDER),
+            str(task),
+        ),
     )
     if not common_tasks:
         st.warning(
@@ -1133,10 +1147,14 @@ def _compare_versions(df: pd.DataFrame):
     col_task, col_models, col_metric = st.columns([2, 2, 2])
     with col_task:
         selected_task_labels = st.multiselect(
-            "Task types",
+            "Tasks",
             task_labels,
             default=task_labels,
             key=task_key,
+            help=(
+                "TTS has voice clone, default voice, and voice design tasks. "
+                "ASR / STT has a single transcription task."
+            ),
         )
     if not selected_task_labels:
         st.info("Select at least one task type.")
