@@ -69,12 +69,6 @@ LOAD_GENERATORS = {
     "k6",
 }
 
-IO_PAIR_LABELS = {
-    ("text", "audio"): "TTS (text → audio)",
-    ("audio", "text"): "ASR / STT (audio → text)",
-    ("text", "text"): "Text (text → text)",
-}
-
 TASK_TYPE_LABELS = {
     "voice_clone": "TTS - Voice Clone",
     "default_voice": "TTS - Default Voice",
@@ -328,16 +322,6 @@ def _normalise(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = "unknown"
         df[col] = df[col].fillna("unknown")
 
-    df["io_pair"] = [
-        IO_PAIR_LABELS.get(
-            (str(input_modality), str(output_modality)),
-            f"{input_modality} → {output_modality}",
-        )
-        for input_modality, output_modality in zip(
-            df["input_modality"], df["output_modality"]
-        )
-    ]
-
     def _conc_label(value):
         if pd.isna(value):
             return "n/a"
@@ -398,7 +382,7 @@ def _main_filters(df: pd.DataFrame) -> pd.DataFrame:
     st.subheader("Filter Your Data")
 
     filter_col1, filter_col2, filter_col3, filter_col4, filter_col5 = st.columns(
-        [1.5, 1.3, 1.5, 2.7, 1]
+        [1.5, 1.8, 1.3, 2.7, 1]
     )
 
     with filter_col1:
@@ -409,39 +393,56 @@ def _main_filters(df: pd.DataFrame) -> pd.DataFrame:
     if accelerators:
         filtered = filtered[filtered["accelerator"].isin(accelerators)]
 
+    task_values = sorted(
+        _values(filtered, "task_type"),
+        key=lambda task: (
+            TASK_TYPE_ORDER.index(task)
+            if task in TASK_TYPE_ORDER
+            else len(TASK_TYPE_ORDER),
+            str(task),
+        ),
+    )
+    task_options = [(task, _task_label(task)) for task in task_values]
+    task_labels = [label for _, label in task_options]
+    task_key = _selection_key("omni_task", accelerators)
+    if task_key in st.session_state:
+        st.session_state[task_key] = [
+            label for label in st.session_state[task_key] if label in task_labels
+        ]
     with filter_col2:
-        io_pairs = _multiselect(
-            "2️⃣ Select Input / Output", _values(filtered, "io_pair"),
-            _selection_key("omni_io", accelerators),
+        selected_task_labels = st.multiselect(
+            "2️⃣ Select Task(s)",
+            task_labels,
+            default=task_labels,
+            key=task_key,
         )
-    if io_pairs:
-        filtered = filtered[filtered["io_pair"].isin(io_pairs)]
+    selected_tasks = [
+        task for task, label in task_options if label in selected_task_labels
+    ]
+    if selected_tasks:
+        filtered = filtered[filtered["task_type"].isin(selected_tasks)]
 
     with filter_col3:
         versions = _multiselect(
             "3️⃣ Select Version(s)", _values(filtered, "runtime_version"),
-            _selection_key("omni_version", accelerators, io_pairs),
+            _selection_key("omni_version", accelerators, selected_tasks),
         )
         if versions:
             filtered = filtered[filtered["runtime_version"].isin(versions)]
-        tasks = _multiselect(
-            "4️⃣ Select Task Type(s)", _values(filtered, "task_type"),
-            _selection_key("omni_task", accelerators, io_pairs, versions),
-        )
-        if tasks:
-            filtered = filtered[filtered["task_type"].isin(tasks)]
 
     with filter_col4:
         generators = _multiselect(
-            "5️⃣ Select Load Generator(s)", _values(filtered, "load_generator"),
-            _selection_key("omni_generator", accelerators, io_pairs, versions, tasks),
+            "4️⃣ Select Load Generator(s)", _values(filtered, "load_generator"),
+            _selection_key(
+                "omni_generator", accelerators, selected_tasks, versions
+            ),
         )
         if generators:
             filtered = filtered[filtered["load_generator"].isin(generators)]
         models = _multiselect(
-            "6️⃣ Select Model(s)", _values(filtered, "model"),
+            "5️⃣ Select Model(s)", _values(filtered, "model"),
             _selection_key(
-                "omni_model", accelerators, io_pairs, versions, tasks, generators
+                "omni_model", accelerators, selected_tasks, versions, generators
             ),
         )
         if models:
@@ -449,9 +450,14 @@ def _main_filters(df: pd.DataFrame) -> pd.DataFrame:
 
     with filter_col5:
         tps = _multiselect(
-            "7️⃣ Select TP Size(s)", _values(filtered, "tp"),
+            "6️⃣ Select TP Size(s)", _values(filtered, "tp"),
             _selection_key(
-                "omni_tp", accelerators, io_pairs, versions, tasks, generators, models
+                "omni_tp",
+                accelerators,
+                selected_tasks,
+                versions,
+                generators,
+                models,
             ),
         )
         if tps:

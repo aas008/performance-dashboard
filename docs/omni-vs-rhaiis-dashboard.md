@@ -36,7 +36,7 @@ Status: **draft checkpoint** — no final UX decisions below are implemented exc
 **Overview is the default page** and shows headline metrics plus a coverage table, with no filter panel.
 
 - **Performance Plots**:
-- Horizontal RHAIIS-style filter band in the main content with RHAIIS column widths (`1.5, 1.3, 1.5, 2.7, 1`). Input/Output values are displayed as `TTS (text → audio)`, `ASR / STT (audio → text)`, and `Text (text → text)`.
+- Horizontal RHAIIS-style filter band in the main content: Accelerator → Task → Version → Load Generator + Model → TP. Task labels include modality (`TTS - Voice Clone`, `ASR / STT - Transcription`, `Text - Text generation`), replacing the separate Input/Output filter.
 - X-axis (`Concurrency` / `Model`), Y-axis metric, and a max-concurrency selector.
 - One Plotly line chart using the RHAIIS `plotly_white_light` template, markers, right-side legend, 560px height, and RHAIIS margins.
 - Clicking points, or box/lasso-selecting an area, adds plot lines to the comparison.
@@ -127,7 +127,7 @@ Auto-fill rule:
 
 1. ~~**Left panel:** keep the RHAIIS navigation in Omni and move filters into main content, or keep filter-only sidebar?~~ **Closed — keep the RHAIIS navigation; filters moved into main content.**
 2. **Pages:** which RHAIIS pages should Omni clone — Overview, Performance Plots, Compare Versions, Performance Trends, Model Comparison, Filtered Data? Which can be left out for now? *Implemented so far: Overview, Performance Plots, Compare Versions, View Logs, Filtered Data.*
-3. **Filter order:** is the proposed order (Accelerator → Input/Output → Version → Task → Load gen → Model → TP) correct?
+3. **Filter order:** is the current order (Accelerator → Task → Version → Load gen → Model → TP) correct?
 4. **Auto-fill semantics:** auto-select all available models, or only narrow the options and let the user choose?
 5. **Modality vs Input/Output:** replace `Modality` with the input→output pair, or keep both?
 6. **TP:** include TP in the Omni UI? Current data is all TP=1.
@@ -308,3 +308,11 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - Persist Compare Versions selections in `cv_base`, `cv_comp`, `cv_tasks`, `cv_loadgen`, `cv_models`, and `cv_stat`.
 - On first load, the page hydrates widget state from those parameters; subsequent widget changes update the URL.
 - Verified by copying a Compare Versions URL with ASR-only, GuideLLM, `example/asr-2b`, and Mean selected, then opening it in a fresh tab: all selections and the section restored.
+
+## Checkpoint 15 — merged Input/Output and Task filter
+
+- Merged the separate Input/Output and Task Type filters into one **Task** selector.
+- Task labels carry the modality: `TTS - Voice Clone`, `TTS - Default Voice`, `TTS - Voice Design`, `ASR / STT - Transcription`, `Text - Text generation`.
+- Filter steps are now Accelerator → Task → Version → Load Generator → Model → TP.
+- Removed the unused `io_pair` field.
+- Compare Versions already used combined task labels, so no change was needed there.
