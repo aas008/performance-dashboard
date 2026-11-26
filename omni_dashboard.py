@@ -69,6 +69,12 @@ LOAD_GENERATORS = {
     "k6",
 }
 
+IO_PAIR_LABELS = {
+    ("text", "audio"): "TTS (text → audio)",
+    ("audio", "text"): "ASR (audio → text)",
+    ("text", "text"): "Text (text → text)",
+}
+
 PLOT_CUSTOM_DATA = [
     "model",
     "runtime_version",
@@ -219,7 +225,15 @@ def _normalise(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = "unknown"
         df[col] = df[col].fillna("unknown")
 
-    df["io_pair"] = df["input_modality"].astype(str) + " → " + df["output_modality"].astype(str)
+    df["io_pair"] = [
+        IO_PAIR_LABELS.get(
+            (str(input_modality), str(output_modality)),
+            f"{input_modality} → {output_modality}",
+        )
+        for input_modality, output_modality in zip(
+            df["input_modality"], df["output_modality"]
+        )
+    ]
 
     def _conc_label(value):
         if pd.isna(value):
