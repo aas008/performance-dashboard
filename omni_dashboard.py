@@ -555,7 +555,6 @@ def _view_logs(df: pd.DataFrame):
             st.session_state["omni_log_result"]["content"] = content
         except Exception as exc:
             st.session_state["omni_log_result"]["error"] = str(exc)
-        st.session_state["omni_show_full_log"] = False
 
     cached = st.session_state.get("omni_log_result")
     if (
@@ -573,9 +572,17 @@ def _view_logs(df: pd.DataFrame):
     content = cached.get("content") or ""
     startup_marker = "Application startup complete."
     startup_pos = content.find(startup_marker)
-    show_full = st.session_state.get("omni_show_full_log", False)
 
-    if startup_pos != -1 and not show_full:
+    startup_only = False
+    if startup_pos != -1:
+        startup_only = st.toggle(
+            "Startup only",
+            value=False,
+            key=f"omni_startup_only_{run_key}",
+            help="Show only the lines up to the startup marker.",
+        )
+
+    if startup_only:
         st.success(f"Log loaded for `{selected_run}` (startup only)")
         st.text_area(
             "Log output (startup)",
@@ -584,19 +591,6 @@ def _view_logs(df: pd.DataFrame):
             disabled=True,
             key=f"omni_log_startup_{run_key}",
         )
-        col_show, col_download = st.columns(2)
-        with col_show:
-            if st.button("📄 Show Full Log", key=f"omni_show_full_{run_key}"):
-                st.session_state["omni_show_full_log"] = True
-                st.rerun()
-        with col_download:
-            st.download_button(
-                "⬇️ Download Full Log",
-                data=content,
-                file_name=f"{run_key}.log",
-                mime="text/plain",
-                key=f"omni_download_log_{run_key}",
-            )
     else:
         st.success(f"Log loaded for `{selected_run}`")
         st.text_area(
@@ -606,13 +600,14 @@ def _view_logs(df: pd.DataFrame):
             disabled=True,
             key=f"omni_log_full_{run_key}",
         )
-        st.download_button(
-            "⬇️ Download Full Log",
-            data=content,
-            file_name=f"{run_key}.log",
-            mime="text/plain",
-            key=f"omni_download_full_{run_key}",
-        )
+
+    st.download_button(
+        "⬇️ Download Full Log",
+        data=content,
+        file_name=f"{run_key}.log",
+        mime="text/plain",
+        key=f"omni_download_log_{run_key}",
+    )
 
 
 def _overview(df: pd.DataFrame):
