@@ -380,6 +380,38 @@ def _multiselect(label: str, options: list, key: str) -> list:
     return st.multiselect(label, options, default=options, key=key)
 
 
+def _select_all_models_multiselect(label: str, options: list, key: str) -> list:
+    if not options:
+        return []
+    select_all_key = f"{key}_select_all"
+    if select_all_key not in st.session_state:
+        selected = st.session_state.get(key, options)
+        st.session_state[select_all_key] = set(selected) == set(options)
+
+    def _sync_select_all():
+        st.session_state[select_all_key] = (
+            set(st.session_state.get(key, [])) == set(options)
+        )
+
+    def _apply_select_all():
+        if st.session_state.get(select_all_key):
+            st.session_state[key] = options
+
+    selected = st.multiselect(
+        label,
+        options,
+        default=options,
+        key=key,
+        on_change=_sync_select_all,
+    )
+    st.checkbox(
+        "Select All Models",
+        key=select_all_key,
+        on_change=_apply_select_all,
+    )
+    return selected
+
+
 def _selection_key(prefix: str, *groups) -> str:
     signature = "|".join(",".join(str(value) for value in sorted(group)) for group in groups)
     return f"{prefix}_{signature}"
@@ -448,8 +480,10 @@ def _main_filters(df: pd.DataFrame) -> pd.DataFrame:
         )
         if generators:
             filtered = filtered[filtered["load_generator"].isin(generators)]
-        models = _multiselect(
-            "5️⃣ Select Model(s)", _values(filtered, "model"),
+        model_options = _values(filtered, "model")
+        models = _select_all_models_multiselect(
+            "5️⃣ Select Model(s)",
+            model_options,
             _selection_key(
                 "omni_model", accelerators, selected_tasks, versions, generators
             ),
@@ -1457,11 +1491,10 @@ def _compare_versions(df: pd.DataFrame):
         st.session_state[model_key] = pending_models
 
     with col_models:
-        models = st.multiselect(
+        models = _select_all_models_multiselect(
             "Models",
             common_models,
-            default=common_models,
-            key=model_key,
+            model_key,
         )
     if not models:
         st.info("Select at least one model.")

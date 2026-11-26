@@ -316,3 +316,10 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - Filter steps are now Accelerator → Task → Version → Load Generator → Model → TP.
 - Removed the unused `io_pair` field.
 - Compare Versions already used combined task labels, so no change was needed there.
+
+## Checkpoint 16 — Select All Models
+
+- Added a **Select All Models** checkbox under both model multiselects: Performance Plots and Compare Versions.
+- The checkbox reflects whether all available models are selected.
+- Checking it selects every model; removing a model unchecks it automatically.
+- Verified in Performance Plots: removing `Voxtral-4B-TTS-2603` unchecked the box, and checking it restored all models. Verified the checkbox is present in Compare Versions.
