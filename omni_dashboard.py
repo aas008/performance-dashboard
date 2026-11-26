@@ -337,7 +337,7 @@ def _log_kind(path: str) -> str:
         return "Full server log"
     if "startup" in name:
         return "Startup log"
-    if "saturation" in name:
+    if "saturation" in name or "bench" in name or re.search(r"_c\d+(?:\D|$)", name):
         return "Benchmark log"
     return "Log"
 
