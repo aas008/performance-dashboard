@@ -148,6 +148,13 @@ The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is 
 - Clicking points, or box/lasso-selecting an area, adds plot lines to the comparison.
 - A **Filtered Data for Plot Lines** section shows the source rows for the selected lines, with a **Clear comparison** button.
 
+**Compare Versions**:
+
+- Baseline and comparison version selectors with a swap button, plus a model filter and metric selector.
+- Matches rows on model, task type, concurrency, load generator, TP, and accelerator. Dataset is included when both versions carry it.
+- Aggregates repeated rows per key, computes percent delta, and classifies each comparison as **Better**, **Worse**, or **Flat** using the metric's direction.
+- Shows summary cards, a delta bar chart, an all-metric summary table, a detailed table, and a CSV download.
+
 **Filtered Data** uses the same numbered filters and adds a CSV download. Other RHAIIS sections remain visible and show a placeholder until they are implemented.
 
 **View Logs** selects a run and fetches its log. Source priority:

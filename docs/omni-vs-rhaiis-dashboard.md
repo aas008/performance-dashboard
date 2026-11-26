@@ -126,7 +126,7 @@ Auto-fill rule:
 ## Open questions
 
 1. ~~**Left panel:** keep the RHAIIS navigation in Omni and move filters into main content, or keep filter-only sidebar?~~ **Closed — keep the RHAIIS navigation; filters moved into main content.**
-2. **Pages:** which RHAIIS pages should Omni clone — Overview, Performance Plots, Compare Versions, Performance Trends, Model Comparison, Filtered Data? Which can be left out for now? *Implemented so far: Overview, Performance Plots, Filtered Data.*
+2. **Pages:** which RHAIIS pages should Omni clone — Overview, Performance Plots, Compare Versions, Performance Trends, Model Comparison, Filtered Data? Which can be left out for now? *Implemented so far: Overview, Performance Plots, Compare Versions, View Logs, Filtered Data.*
 3. **Filter order:** is the proposed order (Accelerator → Input/Output → Version → Task → Load gen → Model → TP) correct?
 4. **Auto-fill semantics:** auto-select all available models, or only narrow the options and let the user choose?
 5. **Modality vs Input/Output:** replace `Modality` with the input→output pair, or keep both?
@@ -236,3 +236,12 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - The view always shows the complete log, and **Download Full Log** downloads it.
 - Added a sanitized demo log at `datasets/omni/logs/demo-tts-c1.log` so the public sample row works without configuring a log backend.
 - Tested locally with the demo log and with the real 3.6 GA c1 run: the full 6,086,641-character server log rendered end to end, and the demo log loaded completely.
+
+## Checkpoint 8 — Compare Versions implemented
+
+- Added baseline/comparison version selectors with a swap button, a model filter, and a metric selector.
+- Version defaults prefer the most recent version as the comparison and the earlier version with the longest common prefix as the baseline (for example, `vllm-omni-3.5-ea2` → `vllm-omni-3.6.0-ga`).
+- Rows are matched on model, task type, concurrency, load generator, TP, and accelerator. Dataset is included when both versions provide it, so legacy rows without a dataset still match.
+- Repeated rows per key are averaged before comparison. Delta is the raw percent change; verdicts account for higher-is-better vs lower-is-better metrics with a 1% flat threshold.
+- Outputs: comparison cards, a `plotly_white_light` delta bar chart, an all-metric summary table, a detailed table, and CSV download.
+- Tested with the real 1.7B Base data: `vllm-omni-3.5-ea2` vs `vllm-omni-3.6.0-ga` produced 4 comparisons across c1/c4/c8/c16, all Better for throughput and RTF. Swapping versions flipped the verdicts to Worse, and switching to a lower-is-better metric flipped the colors/signs correctly.

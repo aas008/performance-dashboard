@@ -101,6 +101,37 @@ OMNI_X_AXES = {
     "Model": "model",
 }
 
+OMNI_COMPARE_DIRECTIONS = {
+    "request_throughput_rps": ("higher", ".2f"),
+    "audio_throughput_x": ("higher", ".2f"),
+    "output_token_throughput": ("higher", ".2f"),
+    "total_token_throughput": ("higher", ".2f"),
+    "audio_rtf_mean": ("lower", ".4f"),
+    "audio_rtf_p95": ("lower", ".4f"),
+    "audio_ttfp_ms_mean": ("lower", ".1f"),
+    "audio_ttfp_ms_p95": ("lower", ".1f"),
+    "audio_underrun_s_mean": ("lower", ".3f"),
+    "audio_underrun_s_p95": ("lower", ".3f"),
+    "ttft_ms_median": ("lower", ".1f"),
+    "tpot_ms_median": ("lower", ".2f"),
+    "itl_ms_median": ("lower", ".2f"),
+    "e2el_ms_median": ("lower", ".1f"),
+    "wer": ("lower", ".4f"),
+    "rtfx": ("higher", ".2f"),
+    "transcription_throughput_utterances_s": ("higher", ".2f"),
+}
+
+COMPARE_KEYS = [
+    "model",
+    "task_type",
+    "dataset",
+    "concurrency_label",
+    "load_generator",
+    "tp",
+    "accelerator",
+]
+COMPARE_FLAT_THRESHOLD_PCT = 1.0
+
 # Same navigation groups/labels as the RHAIIS shell. Pages that are not yet
 # implemented for Omni render a clear placeholder rather than disappearing.
 OMNI_NAV_GROUPS = [
@@ -709,6 +740,387 @@ def _performance_plots(df: pd.DataFrame):
         st.caption("No plot lines selected.")
 
 
+def _natural_key(value: str) -> list:
+    return [
+        (0, int(part)) if part.isdigit() else (1, part.lower())
+        for part in re.split(r"(\d+)", str(value))
+    ]
+
+
+def _version_order(df: pd.DataFrame) -> list:
+    versions = _values(df, "runtime_version")
+    if "timestamp_utc" in df.columns and versions:
+        timestamps = pd.to_datetime(df["timestamp_utc"], errors="coerce", utc=True)
+        if timestamps.notna().any():
+            latest = (
+                df.assign(_ts=timestamps)
+                .dropna(subset=["_ts"])
+                .groupby("runtime_version")["_ts"]
+                .max()
+                .sort_values(kind="stable")
+            )
+            ordered = [version for version in latest.index if version in versions]
+            ordered.extend(version for version in versions if version not in ordered)
+            return ordered
+    return sorted(versions, key=_natural_key)
+
+
+def _common_prefix_length(left: str, right: str) -> int:
+    length = 0
+    for left_char, right_char in zip(str(left), str(right)):
+        if left_char != right_char:
+            break
+        length += 1
+    return length
+
+
+def _compare_defaults(versions: list) -> tuple:
+    candidate = versions[-1]
+    baseline = max(
+        versions[:-1],
+        key=lambda version: (
+            _common_prefix_length(version, candidate),
+            versions.index(version),
+        ),
+    )
+    return baseline, candidate
+
+
+def _comparison_keys(
+    base_df: pd.DataFrame, comparison_df: pd.DataFrame
+) -> list:
+    keys = []
+    for key in COMPARE_KEYS:
+        if key not in base_df.columns or key not in comparison_df.columns:
+            continue
+
+        def _has_values(frame: pd.DataFrame) -> bool:
+            values = frame[key].dropna().astype(str).str.strip().str.lower()
+            return bool(values[~values.isin(["", "nan", "none", "n/a"])].any())
+
+        if _has_values(base_df) and _has_values(comparison_df):
+            keys.append(key)
+    return keys
+
+
+def _comparison_table(
+    base_df: pd.DataFrame,
+    comparison_df: pd.DataFrame,
+    metric: str,
+    direction: str,
+) -> pd.DataFrame:
+    keys = _comparison_keys(base_df, comparison_df)
+    base = base_df.dropna(subset=[metric]).copy()
+    comparison = comparison_df.dropna(subset=[metric]).copy()
+    if base.empty or comparison.empty:
+        return pd.DataFrame()
+
+    def _prepare(frame: pd.DataFrame) -> pd.DataFrame:
+        prepared = frame[keys + [metric]].copy()
+        for key in keys:
+            prepared[key] = (
+                prepared[key]
+                .astype(str)
+                .replace({"nan": "n/a", "None": "n/a", "": "n/a"})
+            )
+        prepared["_key"] = prepared[keys].agg(" | ".join, axis=1)
+        return prepared
+
+    aggregations = {metric: "mean", **{key: "first" for key in keys}}
+    base_grouped = _prepare(base).groupby("_key", as_index=False).agg(aggregations)
+    comparison_grouped = (
+        _prepare(comparison).groupby("_key", as_index=False).agg(aggregations)
+    )
+    merged = base_grouped.merge(
+        comparison_grouped, on="_key", suffixes=("_baseline", "_comparison")
+    )
+    merged["baseline"] = merged.pop(f"{metric}_baseline")
+    merged["comparison"] = merged.pop(f"{metric}_comparison")
+    for key in keys:
+        merged[key] = merged.pop(f"{key}_baseline")
+    merged = merged.dropna(subset=["baseline", "comparison"])
+
+    denominator = merged["baseline"].abs()
+    merged["delta_pct"] = np.where(
+        denominator > 0,
+        (merged["comparison"] - merged["baseline"]) / denominator * 100,
+        np.nan,
+    )
+
+    def _verdict(delta):
+        if pd.isna(delta):
+            return "n/a"
+        if abs(delta) < COMPARE_FLAT_THRESHOLD_PCT:
+            return "Flat"
+        if direction == "higher":
+            return "Better" if delta > 0 else "Worse"
+        return "Better" if delta < 0 else "Worse"
+
+    merged["verdict"] = merged["delta_pct"].apply(_verdict)
+    merged["label"] = (
+        merged["model"].astype(str).str.split("/").str[-1]
+        + " | "
+        + merged["task_type"].astype(str)
+        + " | c="
+        + merged["concurrency_label"].astype(str)
+    )
+    if merged["load_generator"].nunique() > 1:
+        merged["label"] += " | " + merged["load_generator"].astype(str)
+    merged["_concurrency_sort"] = pd.to_numeric(
+        merged["concurrency_label"], errors="coerce"
+    ).fillna(9999)
+    merged = merged.sort_values(
+        ["model", "task_type", "_concurrency_sort", "load_generator"]
+    ).drop(columns=["_concurrency_sort"])
+    return merged
+
+
+def _comparison_summary(
+    base_df: pd.DataFrame, comparison_df: pd.DataFrame
+) -> pd.DataFrame:
+    rows = []
+    for label, metric in OMNI_METRICS.items():
+        direction, _ = OMNI_COMPARE_DIRECTIONS.get(metric, ("higher", ".2f"))
+        detail = _comparison_table(base_df, comparison_df, metric, direction)
+        if detail.empty:
+            continue
+        counts = detail["verdict"].value_counts()
+        mean_delta = detail["delta_pct"].mean()
+        rows.append(
+            {
+                "Metric": label,
+                "Direction": "Higher is better" if direction == "higher" else "Lower is better",
+                "Pairs": len(detail),
+                "Better": int(counts.get("Better", 0)),
+                "Worse": int(counts.get("Worse", 0)),
+                "Flat": int(counts.get("Flat", 0)),
+                "Mean delta %": round(float(mean_delta), 2) if pd.notna(mean_delta) else None,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _default_compare_metric(frame: pd.DataFrame) -> str:
+    tasks = set(frame["task_type"].dropna().astype(str))
+    if tasks and tasks <= {"asr_transcription"}:
+        return "WER"
+    if tasks & {"voice_clone", "default_voice", "voice_design"}:
+        return "Audio RTF P95"
+    return "Request throughput (req/s)"
+
+
+def _compare_versions(df: pd.DataFrame):
+    st.subheader("⚖️ Compare Versions")
+    st.markdown(
+        "💡 **Compare the same model, task, dataset, and concurrency across two runtime versions.**"
+    )
+
+    versions = _version_order(df)
+    if len(versions) < 2:
+        st.warning("Need at least two runtime versions in the data to compare.")
+        return
+
+    default_baseline, default_candidate = _compare_defaults(versions)
+    for key in ("omni_compare_baseline", "omni_compare_candidate"):
+        if st.session_state.get(key) not in versions:
+            st.session_state.pop(key, None)
+    st.session_state.setdefault("omni_compare_baseline", default_baseline)
+    st.session_state.setdefault("omni_compare_candidate", default_candidate)
+
+    col1, swap_col, col2 = st.columns([4, 0.5, 4])
+    with col1:
+        baseline = st.selectbox(
+            "Select Version 1 (Baseline)",
+            versions,
+            key="omni_compare_baseline",
+        )
+
+    def _swap_versions():
+        baseline_value = st.session_state.get("omni_compare_baseline")
+        candidate_value = st.session_state.get("omni_compare_candidate")
+        st.session_state["omni_compare_baseline"] = candidate_value
+        st.session_state["omni_compare_candidate"] = baseline_value
+
+    with swap_col:
+        st.markdown("<div style='height: 1.65rem'></div>", unsafe_allow_html=True)
+        st.button(
+            "⇄",
+            key="omni_compare_swap",
+            help="Swap versions",
+            on_click=_swap_versions,
+        )
+    with col2:
+        candidate = st.selectbox(
+            "Select Version 2 (Comparison)",
+            versions,
+            key="omni_compare_candidate",
+        )
+
+    if baseline == candidate:
+        st.warning("Select two different versions to compare.")
+        return
+
+    base_all = df[df["runtime_version"] == baseline].copy()
+    comparison_all = df[df["runtime_version"] == candidate].copy()
+    common_models = sorted(
+        set(base_all["model"].dropna()) & set(comparison_all["model"].dropna())
+    )
+    if not common_models:
+        st.warning(
+            f"No common models found between {baseline} and {candidate}."
+        )
+        return
+
+    model_key = _selection_key("omni_compare_models", baseline, candidate)
+    if model_key in st.session_state:
+        st.session_state[model_key] = [
+            model for model in st.session_state[model_key] if model in common_models
+        ]
+
+    col3, col4 = st.columns([3, 2])
+    with col3:
+        models = st.multiselect(
+            "Models",
+            common_models,
+            default=common_models,
+            key=model_key,
+        )
+    if not models:
+        st.info("Select at least one model.")
+        return
+
+    base = base_all[base_all["model"].isin(models)]
+    comparison = comparison_all[comparison_all["model"].isin(models)]
+    metric_options = [
+        label
+        for label, column in OMNI_METRICS.items()
+        if base[column].notna().any() and comparison[column].notna().any()
+    ]
+    if not metric_options:
+        st.warning(
+            f"No comparable metrics found between {baseline} and {candidate} "
+            "for the selected models."
+        )
+        return
+
+    preferred_metric = _default_compare_metric(base)
+    metric_index = (
+        metric_options.index(preferred_metric)
+        if preferred_metric in metric_options
+        else 0
+    )
+    metric_key = _selection_key(
+        "omni_compare_metric", baseline, candidate, models
+    )
+    with col4:
+        metric_label = st.selectbox(
+            "Metric",
+            metric_options,
+            index=metric_index,
+            key=metric_key,
+        )
+
+    metric = OMNI_METRICS[metric_label]
+    direction, _ = OMNI_COMPARE_DIRECTIONS.get(metric, ("higher", ".2f"))
+    detail = _comparison_table(base, comparison, metric, direction)
+    if detail.empty:
+        st.warning(
+            "No matching model/task/dataset/concurrency rows found for both versions."
+        )
+        return
+
+    better = int((detail["verdict"] == "Better").sum())
+    worse = int((detail["verdict"] == "Worse").sum())
+    flat = int((detail["verdict"] == "Flat").sum())
+    mean_delta = detail["delta_pct"].mean()
+
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    metric_col1.metric("Comparisons", len(detail))
+    metric_col2.metric("Better", better)
+    metric_col3.metric("Worse", worse)
+    metric_col4.metric(
+        "Mean delta",
+        f"{mean_delta:+.1f}%" if pd.notna(mean_delta) else "n/a",
+    )
+    st.caption(
+        f"Flat: {flat}. Delta is the raw percent change; verdict accounts for "
+        "metric direction, so a negative delta is better for lower-is-better metrics."
+    )
+
+    fig = px.bar(
+        detail.sort_values("label"),
+        x="label",
+        y="delta_pct",
+        color="verdict",
+        color_discrete_map={
+            "Better": "#2e7d32",
+            "Worse": "#c62828",
+            "Flat": "#9e9e9e",
+            "n/a": "#bdbdbd",
+        },
+        custom_data=[
+            "model",
+            "task_type",
+            "concurrency_label",
+            "baseline",
+            "comparison",
+        ],
+        title=f"<b>{metric_label}: {candidate} vs {baseline}</b>",
+        template="plotly_white_light",
+    )
+    fig.add_hline(y=0, line_dash="dash", line_color="#6b7280")
+    fig.update_traces(marker_line_color="white", marker_line_width=1)
+    for trace in fig.data:
+        trace.hovertemplate = (
+            "Model: %{customdata[0]}<br>"
+            "Task: %{customdata[1]}<br>"
+            "Concurrency: %{customdata[2]}<br>"
+            "Baseline: %{customdata[3]}<br>"
+            "Comparison: %{customdata[4]}<br>"
+            "Delta: %{y:.1f}%<extra></extra>"
+        )
+    fig.update_layout(
+        height=560,
+        margin={"l": 80, "r": 250, "t": 110, "b": 150},
+        xaxis_tickangle=-35,
+        xaxis_title="",
+        yaxis_title="Delta vs baseline (%)",
+        legend_title_text="Result",
+    )
+    st.plotly_chart(fig, use_container_width=True, theme=None, key="omni_compare_chart")
+
+    summary = _comparison_summary(base, comparison)
+    if not summary.empty:
+        st.subheader("All metric summary")
+        st.dataframe(summary, use_container_width=True, hide_index=True)
+
+    st.subheader(f"{metric_label} details")
+    detail_columns = ["model", "task_type", "concurrency_label"]
+    for key in ("dataset", "load_generator", "tp", "accelerator"):
+        if key in detail.columns and detail[key].nunique() > 1:
+            detail_columns.append(key)
+    detail_columns.extend(["baseline", "comparison", "delta_pct", "verdict"])
+    display = detail[detail_columns].copy()
+    display["baseline"] = display["baseline"].round(4)
+    display["comparison"] = display["comparison"].round(4)
+    display["delta_pct"] = display["delta_pct"].round(2)
+    display = display.rename(
+        columns={
+            "baseline": f"Baseline ({baseline})",
+            "comparison": f"Comparison ({candidate})",
+            "delta_pct": "Delta %",
+            "verdict": "Result",
+        }
+    )
+    st.dataframe(display, use_container_width=True, hide_index=True)
+    st.download_button(
+        "Download comparison CSV",
+        data=detail[detail_columns].to_csv(index=False).encode("utf-8"),
+        file_name="omni_version_comparison.csv",
+        mime="text/csv",
+    )
+
+
 def _filtered_data(df: pd.DataFrame):
     st.subheader("📄 Filtered Data")
     st.dataframe(df, use_container_width=True, hide_index=True)
@@ -734,6 +1146,8 @@ def _render_section(section: str, df: pd.DataFrame):
             st.warning("No rows match the current filters.")
             return
         _performance_plots(filtered)
+    elif section == "⚖️ Compare Versions":
+        _compare_versions(df)
     elif section == "📄 Filtered Data":
         filtered = _main_filters(df)
         if filtered.empty:
