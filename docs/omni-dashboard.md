@@ -107,6 +107,33 @@ Inputs:
 
 The converter prints a JSON summary with row counts, modality/task breakdown, and required-field blanks.
 
+## Extract runs from MLflow
+
+`manual_runs/scripts/extract_mlflow_runs.py` pulls run metadata and selected artifacts into a local folder. Credentials and the tracking server come from the environment; nothing is hardcoded.
+
+```bash
+export MLFLOW_TRACKING_URI=https://mlflow.example.com
+export MLFLOW_WORKSPACE=my-workspace
+export MLFLOW_TRACKING_USERNAME=...
+export MLFLOW_TRACKING_PASSWORD=...
+
+python manual_runs/scripts/extract_mlflow_runs.py \
+  --experiment-id 392 \
+  --name-regex '^my-benchmark-run_.*_c[0-9]+$' \
+  --artifact-pattern 'results/*.json' \
+  --artifact-pattern 'logs/*.log' \
+  --output-dir ~/Downloads/mlflow-runs
+```
+
+Outputs:
+
+- `runs.json` — full run records
+- `runs_summary.csv` — flattened `param.*`, `metric.*`, and `tag.*` columns
+- `manifest.json` — selection, downloaded files, skipped files, errors
+- `artifacts/<run>/` — downloaded files, artifact paths preserved
+
+Use `--dry-run` to preview the selection, `--run-id` for specific runs, `--skip-artifacts` for metadata only, and `--max-artifact-mb` to guard against large logs.
+
 ## Dashboard layout
 
 The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is the default page** and shows headline metrics plus a coverage table, with no filter panel.
