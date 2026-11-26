@@ -301,3 +301,10 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - Single-value metrics (throughput, WER, RTFx, transcription throughput) intentionally stay the same when the statistic changes; the page caption explains this.
 - Fixed the offline/`n/a` concurrency path so offline WER rows render in the summary.
 - Verified in the UI: ASR-only + GuideLLM shows an `E2EL P95` column at P95 and `E2EL Mean` at Mean, with different values.
+
+## Checkpoint 14 — shareable URLs
+
+- Persist the active Omni section in the `section` query parameter.
+- Persist Compare Versions selections in `cv_base`, `cv_comp`, `cv_tasks`, `cv_loadgen`, `cv_models`, and `cv_stat`.
+- On first load, the page hydrates widget state from those parameters; subsequent widget changes update the URL.
+- Verified by copying a Compare Versions URL with ASR-only, GuideLLM, `example/asr-2b`, and Mean selected, then opening it in a fresh tab: all selections and the section restored.

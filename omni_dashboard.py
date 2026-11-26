@@ -460,10 +460,23 @@ def _main_filters(df: pd.DataFrame) -> pd.DataFrame:
     return filtered
 
 
+def _query_first(key: str) -> Optional[str]:
+    value = st.query_params.get(key)
+    if isinstance(value, list):
+        return value[0] if value else None
+    return value
+
+
 def _render_sidebar_nav() -> str:
     """Render the same grouped navigation shell used by RHAIIS."""
+    valid_sections = [
+        section for _, sections in OMNI_NAV_GROUPS for section in sections
+    ]
     if "omni_active_section" not in st.session_state:
-        st.session_state.omni_active_section = "🏠 Overview"
+        requested = _query_first("section")
+        st.session_state.omni_active_section = (
+            requested if requested in valid_sections else "🏠 Overview"
+        )
     with st.sidebar:
         for group_name, sections in OMNI_NAV_GROUPS:
             st.markdown(f'<p class="nav-group-header">{group_name}</p>', unsafe_allow_html=True)
@@ -476,7 +489,9 @@ def _render_sidebar_nav() -> str:
                     type="primary" if active else "secondary",
                 ):
                     st.session_state.omni_active_section = section
+                    st.query_params["section"] = section
                     st.rerun()
+    st.query_params["section"] = st.session_state.omni_active_section
     return st.session_state.omni_active_section
 
 
@@ -1242,6 +1257,21 @@ def _compare_versions(df: pd.DataFrame):
         return
 
     default_baseline, default_candidate = _compare_defaults(versions)
+    if not st.session_state.get("omni_compare_url_loaded"):
+        st.session_state.omni_compare_url_pending = {
+            "baseline": _query_first("cv_base"),
+            "candidate": _query_first("cv_comp"),
+            "tasks": _query_first("cv_tasks"),
+            "loadgen": _query_first("cv_loadgen"),
+            "models": _query_first("cv_models"),
+            "stat": _query_first("cv_stat"),
+        }
+        st.session_state.omni_compare_url_loaded = True
+    pending = st.session_state.get("omni_compare_url_pending", {})
+    if pending.get("baseline") in versions:
+        st.session_state["omni_compare_baseline"] = pending["baseline"]
+    if pending.get("candidate") in versions:
+        st.session_state["omni_compare_candidate"] = pending["candidate"]
     for key in ("omni_compare_baseline", "omni_compare_candidate"):
         if st.session_state.get(key) not in versions:
             st.session_state.pop(key, None)
@@ -1306,6 +1336,14 @@ def _compare_versions(df: pd.DataFrame):
         st.session_state[task_key] = [
             label for label in st.session_state[task_key] if label in task_labels
         ]
+    pending_tasks = [
+        task
+        for task in (pending.get("tasks") or "").split(",")
+        if task in common_tasks
+    ]
+    pending_task_labels = [_task_label(task) for task in pending_tasks]
+    if pending_task_labels and task_key not in st.session_state:
+        st.session_state[task_key] = pending_task_labels
 
     col_task, col_loadgen, col_models, col_stat = st.columns([2, 2, 2, 1.3])
     with col_task:
@@ -1356,6 +1394,11 @@ def _compare_versions(df: pd.DataFrame):
     )
     if st.session_state.get(loadgen_key) not in load_generators:
         st.session_state.pop(loadgen_key, None)
+    if (
+        pending.get("loadgen") in load_generators
+        and loadgen_key not in st.session_state
+    ):
+        st.session_state[loadgen_key] = pending["loadgen"]
     with col_loadgen:
         load_generator = st.selectbox(
             "Load generator",
@@ -1393,6 +1436,13 @@ def _compare_versions(df: pd.DataFrame):
         st.session_state[model_key] = [
             model for model in st.session_state[model_key] if model in common_models
         ]
+    pending_models = [
+        model
+        for model in (pending.get("models") or "").split(",")
+        if model in common_models
+    ]
+    if pending_models and model_key not in st.session_state:
+        st.session_state[model_key] = pending_models
 
     with col_models:
         models = st.multiselect(
@@ -1424,6 +1474,11 @@ def _compare_versions(df: pd.DataFrame):
         )
         if st.session_state.get(stat_key) not in summary_statistics:
             st.session_state.pop(stat_key, None)
+        if (
+            pending.get("stat") in summary_statistics
+            and stat_key not in st.session_state
+        ):
+            st.session_state[stat_key] = pending["stat"]
         with col_stat:
             statistic = st.selectbox(
                 "Statistic",
@@ -1438,6 +1493,7 @@ def _compare_versions(df: pd.DataFrame):
     else:
         with col_stat:
             st.caption("Statistic: single value")
+    st.session_state.pop("omni_compare_url_pending", None)
 
     base_concurrency = set(base["concurrency_label"].dropna().astype(str))
     comparison_concurrency = set(
@@ -1529,6 +1585,12 @@ def _compare_versions(df: pd.DataFrame):
         file_name="omni_version_comparison.csv",
         mime="text/csv",
     )
+    st.query_params["cv_base"] = baseline
+    st.query_params["cv_comp"] = candidate
+    st.query_params["cv_tasks"] = ",".join(selected_tasks)
+    st.query_params["cv_loadgen"] = load_generator
+    st.query_params["cv_models"] = ",".join(models)
+    st.query_params["cv_stat"] = statistic or ""
 
 
 def _filtered_data(df: pd.DataFrame):

@@ -179,6 +179,7 @@ The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is 
 - A model-level summary table with 🟢 Better / 🟡 Flat / 🔴 Worse cells. Each cell is the geometric mean of per-concurrency deltas.
 - A Statistic selector (Mean / Median / P95 / P99 where available) applies to the table columns. Throughput, WER, RTFx, and transcription throughput remain single values.
 - One summary table plus a CSV download; no separate metric selector or chart.
+- The active section and Compare Versions selections are stored in the URL (`section`, `cv_base`, `cv_comp`, `cv_tasks`, `cv_loadgen`, `cv_models`, `cv_stat`), so a copied link restores them.
 
 **Filtered Data** uses the same numbered filters and adds a CSV download. Other RHAIIS sections remain visible and show a placeholder until they are implemented.
 
