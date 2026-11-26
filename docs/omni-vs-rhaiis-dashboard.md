@@ -270,3 +270,11 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
   - ASR/STT only: model auto-narrows to `example/asr-2b`, metric defaults to WER, title shows `Task: ASR / STT | Dataset: librispeech`.
   - Dummy STT log loads end to end in View Logs.
   - Fixture test validates 8 rows, two versions, online/offline load generators, and log files.
+
+## Checkpoint 10 — single load generator per comparison
+
+- Added a **Load generator** selector to Compare Versions.
+- Options cascade from the selected tasks and are limited to load generators present in both versions.
+- Comparisons are filtered to the selected load generator before matching, so GuideLLM, vLLM-Omni bench serve, and offline results are never mixed.
+- Default preference: vLLM-Omni bench serve for TTS tasks, GuideLLM otherwise, offline only when it is the sole option.
+- Tested: ASR selection defaults to GuideLLM and shows only GuideLLM rows; switching to offline exposes WER and shows only offline rows.

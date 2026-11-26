@@ -1061,9 +1061,13 @@ def _model_comparison_summary(
 def _default_compare_metric(frame: pd.DataFrame) -> str:
     tasks = set(frame["task_type"].dropna().astype(str))
     if tasks and tasks <= {"asr_transcription"}:
-        return "WER"
+        if frame["wer"].notna().any():
+            return "WER"
+        return "RTFx"
     if tasks & {"voice_clone", "default_voice", "voice_design"}:
-        return "Audio RTF P95"
+        if frame["audio_rtf_p95"].notna().any():
+            return "Audio RTF P95"
+        return "Request throughput (req/s)"
     return "Request throughput (req/s)"
 
 
@@ -1144,7 +1148,7 @@ def _compare_versions(df: pd.DataFrame):
             label for label in st.session_state[task_key] if label in task_labels
         ]
 
-    col_task, col_models, col_metric = st.columns([2, 2, 2])
+    col_task, col_loadgen, col_models, col_metric = st.columns([2, 2, 2, 2])
     with col_task:
         selected_task_labels = st.multiselect(
             "Tasks",
@@ -1167,18 +1171,64 @@ def _compare_versions(df: pd.DataFrame):
     comparison_tasks = comparison_all[
         comparison_all["task_type"].isin(selected_tasks)
     ]
+
+    def _load_generators(frame: pd.DataFrame) -> set:
+        values = frame["load_generator"].dropna().astype(str).str.strip()
+        return set(
+            values[~values.str.lower().isin(["", "nan", "none", "unknown"])]
+        )
+
+    load_generators = sorted(
+        _load_generators(base_tasks) & _load_generators(comparison_tasks),
+        key=lambda value: (value == "offline", str(value)),
+    )
+    if not load_generators:
+        st.warning("No common load generators found for the selected tasks.")
+        return
+    tts_tasks = {"voice_clone", "default_voice", "voice_design"}
+    if "vllm-omni-bench-serve" in load_generators and tts_tasks & set(selected_tasks):
+        preferred_load_generator = "vllm-omni-bench-serve"
+    elif "guidellm" in load_generators:
+        preferred_load_generator = "guidellm"
+    else:
+        preferred_load_generator = load_generators[0]
+    loadgen_key = _selection_key(
+        "omni_compare_loadgen", baseline, candidate, selected_tasks
+    )
+    if st.session_state.get(loadgen_key) not in load_generators:
+        st.session_state.pop(loadgen_key, None)
+    with col_loadgen:
+        load_generator = st.selectbox(
+            "Load generator",
+            load_generators,
+            index=load_generators.index(preferred_load_generator),
+            key=loadgen_key,
+            help=(
+                "Only one load generator is compared at a time. GuideLLM, "
+                "vLLM-Omni bench serve, and offline results are never mixed."
+            ),
+        )
+
+    base_load = base_tasks[base_tasks["load_generator"] == load_generator]
+    comparison_load = comparison_tasks[
+        comparison_tasks["load_generator"] == load_generator
+    ]
     common_models = sorted(
-        set(base_tasks["model"].dropna()) & set(comparison_tasks["model"].dropna())
+        set(base_load["model"].dropna()) & set(comparison_load["model"].dropna())
     )
     if not common_models:
         st.warning(
-            f"No common models found between {baseline} and {candidate} "
-            "for the selected tasks."
+            f"No common models found between {baseline} and {candidate} for "
+            f"the selected tasks and {load_generator}."
         )
         return
 
     model_key = _selection_key(
-        "omni_compare_models", baseline, candidate, selected_tasks
+        "omni_compare_models",
+        baseline,
+        candidate,
+        selected_tasks,
+        [load_generator],
     )
     if model_key in st.session_state:
         st.session_state[model_key] = [
@@ -1196,8 +1246,8 @@ def _compare_versions(df: pd.DataFrame):
         st.info("Select at least one model.")
         return
 
-    base = base_tasks[base_tasks["model"].isin(models)]
-    comparison = comparison_tasks[comparison_tasks["model"].isin(models)]
+    base = base_load[base_load["model"].isin(models)]
+    comparison = comparison_load[comparison_load["model"].isin(models)]
     metric_options = [
         label
         for label, column in OMNI_METRICS.items()
@@ -1217,7 +1267,12 @@ def _compare_versions(df: pd.DataFrame):
         else 0
     )
     metric_key = _selection_key(
-        "omni_compare_metric", baseline, candidate, selected_tasks, models
+        "omni_compare_metric",
+        baseline,
+        candidate,
+        selected_tasks,
+        models,
+        [load_generator],
     )
     with col_metric:
         metric_label = st.selectbox(
@@ -1238,7 +1293,12 @@ def _compare_versions(df: pd.DataFrame):
         st.warning("No common concurrency levels found for both versions.")
         return
     concurrency_key = _selection_key(
-        "omni_compare_concurrency", baseline, candidate, models
+        "omni_compare_concurrency",
+        baseline,
+        candidate,
+        selected_tasks,
+        models,
+        [load_generator],
     )
     if concurrency_key in st.session_state:
         st.session_state[concurrency_key] = [
@@ -1266,6 +1326,7 @@ def _compare_versions(df: pd.DataFrame):
         ("accelerator", "GPU"),
         ("task_type", "Task"),
         ("dataset", "Dataset"),
+        ("load_generator", "Load gen"),
     ):
         if key in base.columns and key in comparison.columns:
             raw_values = pd.concat([base[key], comparison[key]]).astype(str).str.strip()
@@ -1299,7 +1360,9 @@ def _compare_versions(df: pd.DataFrame):
     st.markdown(f"**Comparing:** {baseline} vs {candidate}")
     st.caption(
         "Each version/model/configuration is matched on common concurrency levels. "
-        "Summary cells use the geometric mean of per-concurrency deltas."
+        "Summary cells use the geometric mean of per-concurrency deltas. Only the "
+        "selected load generator is used; results from different load generators "
+        "are never mixed."
     )
 
     metric = OMNI_METRICS[metric_label]

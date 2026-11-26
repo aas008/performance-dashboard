@@ -171,7 +171,8 @@ The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is 
 
 **Compare Versions**:
 
-- Baseline and comparison version selectors with a swap button, plus task-type, model, metric, and concurrency selectors.
+- Baseline and comparison version selectors with a swap button, plus task-type, load-generator, model, metric, and concurrency selectors.
+- Only one load generator is compared at a time. GuideLLM, vLLM-Omni bench serve, and offline rows are never mixed.
 - The task selector cascades into model and metric options, so TTS and ASR/STT tasks are compared separately rather than mixed. Labels are modality-explicit: `TTS - Voice Clone`, `TTS - Default Voice`, `TTS - Voice Design`, `ASR / STT - Transcription`, `Text - Text generation`.
 - A RHAIIS-style context title (GPU / task / dataset), a **Comparing:** line, and a “How are these calculated?” popover.
 - Matches rows on model, task type, concurrency, load generator, TP, and accelerator. Dataset is included when both versions carry it.
