@@ -36,7 +36,7 @@ Status: **draft checkpoint** — no final UX decisions below are implemented exc
 **Overview is the default page** and shows headline metrics plus a coverage table, with no filter panel.
 
 - **Performance Plots**:
-- Horizontal RHAIIS-style filter band in the main content: Accelerator → Task → Version → Load Generator + Model → TP. Task labels include modality (`TTS - Voice Clone`, `ASR / STT - Transcription`, `Text - Text generation`), replacing the separate Input/Output filter.
+- Horizontal RHAIIS-style filter band in the main content: Accelerator → Task → Dataset → Version → Load Generator + Model → TP. Task labels include modality (`TTS - Voice Clone`, `ASR / STT - Transcription`, `Text - Text generation`), replacing the separate Input/Output filter. Dataset defaults to all datasets available for the selected tasks.
 - X-axis (`Concurrency` / `Model`), Y-axis metric, and a max-concurrency selector.
 - One Plotly line chart using the RHAIIS `plotly_white_light` template, markers, right-side legend, 560px height, and RHAIIS margins.
 - Clicking points, or box/lasso-selecting an area, adds plot lines to the comparison.
@@ -127,7 +127,7 @@ Auto-fill rule:
 
 1. ~~**Left panel:** keep the RHAIIS navigation in Omni and move filters into main content, or keep filter-only sidebar?~~ **Closed — keep the RHAIIS navigation; filters moved into main content.**
 2. **Pages:** which RHAIIS pages should Omni clone — Overview, Performance Plots, Compare Versions, Performance Trends, Model Comparison, Filtered Data? Which can be left out for now? *Implemented so far: Overview, Performance Plots, Compare Versions, View Logs, Filtered Data.*
-3. **Filter order:** is the current order (Accelerator → Task → Version → Load gen → Model → TP) correct?
+3. **Filter order:** is the current order (Accelerator → Task → Dataset → Version → Load gen → Model → TP) correct?
 4. **Auto-fill semantics:** auto-select all available models, or only narrow the options and let the user choose?
 5. **Modality vs Input/Output:** replace `Modality` with the input→output pair, or keep both?
 6. **TP:** include TP in the Omni UI? Current data is all TP=1.
@@ -323,3 +323,11 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - The checkbox reflects whether all available models are selected.
 - Checking it selects every model; removing a model unchecks it automatically.
 - Verified in Performance Plots: removing `Voxtral-4B-TTS-2603` unchecked the box, and checking it restored all models. Verified the checkbox is present in Compare Versions.
+
+## Checkpoint 17 — Dataset filter
+
+- Added a **Dataset** filter between Task and Version.
+- Dataset options cascade from the selected tasks and default to all.
+- TTS legacy rows with a blank dataset appear as `(unspecified)`, so selecting all datasets does not drop them.
+- Compare Versions continues to use the raw dataset field for per-task matching.
+- Task tooltip is now a bullet list, one task per line.
