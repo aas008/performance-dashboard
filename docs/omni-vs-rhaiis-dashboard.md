@@ -119,13 +119,13 @@ Auto-fill rule:
 | WebBridge: Omni sidebar | Found Modality, Task type, Load generator, Model, Runtime version, Accelerator, Concurrency. |
 | WebBridge: Omni tabs | Six tabs present; 16 Plotly charts across tabs. |
 | Omni offline row display | HF ASR row now shows `offline`, not the HF scorer as a load generator. |
-| Auto-fill model filter | **Not implemented yet.** |
-| Omni graph click → filtered data | **Not implemented yet.** |
+| Auto-fill model filter | **Implemented** — TTS/ASR/text paths tested. |
+| Omni graph click → filtered data | **Implemented** — point/box/lasso line selection and ASR bar selection tested. |
 | RHAIIS graph click behavior | Code path uses point/box/lasso selection and a plot-line comparison table. |
 
 ## Open questions
 
-1. **Left panel:** keep the RHAIIS navigation in Omni and move filters into main content, or keep filter-only sidebar? The current mismatch is because RHAIIS uses the left panel for navigation.
+1. ~~**Left panel:** keep the RHAIIS navigation in Omni and move filters into main content, or keep filter-only sidebar?~~ **Closed — keep the RHAIIS navigation; filters moved into main content.**
 2. **Pages:** which RHAIIS pages should Omni clone — Overview, Performance Plots, Compare Versions, Performance Trends, Model Comparison, Filtered Data? Which can be left out for now?
 3. **Filter order:** is the proposed order (Accelerator → Version → Input/Output → Task → Load gen → Model → TP → Concurrency) correct, or should Input/Output come first for TTS/ASR users?
 4. **Auto-fill semantics:** auto-select all available models, or only narrow the options and let the user choose?
@@ -146,6 +146,8 @@ Auto-fill rule:
 - Offline accuracy rows use `load_generator=offline` in the UI and blank in the CSV.
 - `gpu_model` is dropped; `accelerator` is the only hardware column.
 - `vllm_version` and `vllm_omni_version` are separate component versions; `runtime_version` is the product/build label.
+- Keep the RHAIIS sidebar navigation shell for Omni; Omni filters live in main content as numbered steps.
+- Unimplemented RHAIIS sections remain visible and show a clear placeholder instead of disappearing.
 
 ## Implementation checklist
 
@@ -179,6 +181,13 @@ WebBridge/Playwright test results:
 | Text `text → text` auto-fill | Passed — model `example/llm-8b` only. |
 | Text point click | Passed — selected a TTFT point and rendered the filtered-data section. |
 | RHAIIS Performance Plots comparison | Passed — numbered filters and plot-line filtered-data behavior confirmed. |
-| Left-panel navigation parity | Open — RHAIIS uses the left panel for navigation; Omni still uses it for filters. |
+| Left-panel navigation parity | **Fixed** — RHAIIS navigation restored; Omni filters moved to main content. |
 
-Still open: Q1/Q2 (left-panel navigation and page scope), graph-selection semantics for multi-line comparison, TP/version labeling, offline ASR chart treatment, and `locale` vs `language`.
+Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labeling, offline ASR chart treatment, and `locale` vs `language`.
+
+## Checkpoint 3 — RHAIIS navigation restored
+
+- Restored the full RHAIIS grouped sidebar navigation for the Omni view: Dashboard, Performance Analysis, Insights, Tools.
+- Moved the Omni filters into the main content as a RHAIIS-style numbered “Filter Your Data” section.
+- Kept unimplemented RHAIIS pages visible with a clear placeholder.
+- Tested: nav groups render; Performance Plots opens the Throughput/Speech Out/Text Latency/ASR Quality tabs; Filtered Data opens the table/download; Cost Analysis shows the placeholder; TTS auto-fill still narrows to the TTS model; ASR bar selection opens the filtered-data table.
