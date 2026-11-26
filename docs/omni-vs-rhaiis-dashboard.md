@@ -36,7 +36,7 @@ Status: **draft checkpoint** — no final UX decisions below are implemented exc
 **Overview is the default page** and shows headline metrics plus a coverage table, with no filter panel.
 
 - **Performance Plots**:
-- Horizontal RHAIIS-style filter band in the main content with RHAIIS column widths (`1.5, 1.3, 1.5, 2.7, 1`). Input/Output values are displayed as `TTS (text → audio)`, `ASR (audio → text)`, and `Text (text → text)`.
+- Horizontal RHAIIS-style filter band in the main content with RHAIIS column widths (`1.5, 1.3, 1.5, 2.7, 1`). Input/Output values are displayed as `TTS (text → audio)`, `ASR / STT (audio → text)`, and `Text (text → text)`.
 - X-axis (`Concurrency` / `Model`), Y-axis metric, and a max-concurrency selector.
 - One Plotly line chart using the RHAIIS `plotly_white_light` template, markers, right-side legend, 560px height, and RHAIIS margins.
 - Clicking points, or box/lasso-selecting an area, adds plot lines to the comparison.

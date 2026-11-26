@@ -71,7 +71,7 @@ LOAD_GENERATORS = {
 
 IO_PAIR_LABELS = {
     ("text", "audio"): "TTS (text → audio)",
-    ("audio", "text"): "ASR (audio → text)",
+    ("audio", "text"): "ASR / STT (audio → text)",
     ("text", "text"): "Text (text → text)",
 }
 
