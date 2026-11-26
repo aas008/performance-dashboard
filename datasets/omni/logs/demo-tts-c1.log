@@ -1,0 +1,24 @@
+2026-01-01 00:00:00,000 INFO [demo] Starting vLLM-Omni server for example/tts-1b
+2026-01-01 00:00:00,120 INFO [demo] Runtime: vllm-omni 0.30.0 | vLLM 0.30.0
+2026-01-01 00:00:00,240 INFO [demo] Loading tokenizer and model config
+2026-01-01 00:00:00,480 INFO [demo] Initializing stage 0 (talker) on GPU 0
+2026-01-01 00:00:01,100 INFO [demo] Stage 0 max_num_seqs=64 gpu_memory_utilization=0.30
+2026-01-01 00:00:01,220 INFO [demo] Initializing stage 1 (codec) on GPU 0
+2026-01-01 00:00:01,760 INFO [demo] Stage 1 gpu_memory_utilization=0.30
+2026-01-01 00:00:02,040 INFO [demo] Warmup request completed in 132.4 ms
+2026-01-01 00:00:02,080 INFO [demo] Application startup complete.
+2026-01-01 00:00:05,000 INFO [demo] benchmark start: num_prompts=100 num_warmups=0 max_concurrency=1 request_rate=inf
+2026-01-01 00:00:05,410 INFO [demo] request completed: audio_duration_s=4.17 audio_ttfp_ms=115.2 audio_rtf=0.103
+2026-01-01 00:00:05,850 INFO [demo] request completed: audio_duration_s=4.12 audio_ttfp_ms=118.7 audio_rtf=0.104
+2026-01-01 00:00:06,290 INFO [demo] request completed: audio_duration_s=4.20 audio_ttfp_ms=113.9 audio_rtf=0.101
+2026-01-01 00:00:06,730 INFO [demo] request completed: audio_duration_s=4.15 audio_ttfp_ms=121.4 audio_rtf=0.105
+2026-01-01 00:00:07,170 INFO [demo] request completed: audio_duration_s=4.18 audio_ttfp_ms=116.8 audio_rtf=0.102
+2026-01-01 00:00:07,610 INFO [demo] request completed: audio_duration_s=4.16 audio_ttfp_ms=119.2 audio_rtf=0.103
+2026-01-01 00:00:08,050 INFO [demo] request completed: audio_duration_s=4.14 audio_ttfp_ms=117.5 audio_rtf=0.104
+2026-01-01 00:00:08,490 INFO [demo] request completed: audio_duration_s=4.19 audio_ttfp_ms=114.6 audio_rtf=0.101
+2026-01-01 00:00:08,930 INFO [demo] request completed: audio_duration_s=4.17 audio_ttfp_ms=120.1 audio_rtf=0.103
+2026-01-01 00:00:09,370 INFO [demo] request completed: audio_duration_s=4.13 audio_ttfp_ms=118.3 audio_rtf=0.102
+2026-01-01 00:00:09,810 INFO [demo] benchmark complete: completed=10 failed=0 duration_s=4.81
+2026-01-01 00:00:09,820 INFO [demo] request_throughput=2.08 req/s audio_throughput=8.67x
+2026-01-01 00:00:09,830 INFO [demo] mean_audio_rtf=0.103 p95_audio_rtf=0.123 mean_audio_ttfp_ms=117.6
+2026-01-01 00:00:09,840 INFO [demo] Demo log end.

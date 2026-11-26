@@ -8,7 +8,10 @@ RHAIIS sidebar navigation shell.
 
 import logging
 import os
+import re
 import sys
+import tempfile
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -35,6 +38,12 @@ S3_KEY_OMNI = os.environ.get("S3_KEY_OMNI", "consolidated_dashboard_omni.csv")
 S3_REGION = os.environ.get("S3_REGION", "us-east-1")
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
+
+MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "")
+MLFLOW_LOG_ARTIFACT_PREFIX = os.environ.get("MLFLOW_LOG_ARTIFACT_PREFIX", "logs")
+OMNI_LOG_DIR = os.environ.get("OMNI_LOG_DIR", "datasets/omni/logs")
+S3_LOGS_BUCKET = os.environ.get("S3_LOGS_BUCKET", "")
+S3_LOGS_PREFIX = os.environ.get("S3_LOGS_PREFIX", "logs/")
 
 NUMERIC_COLUMNS = [
     "concurrency", "measured_concurrency", "num_prompts", "num_utterances",
@@ -310,6 +319,302 @@ def _render_sidebar_nav() -> str:
     return st.session_state.omni_active_section
 
 
+def _log_run_label(row: pd.Series) -> str:
+    parts = [
+        str(row.get("run_name") or row.get("deployment_uuid") or "run"),
+        str(row.get("model") or ""),
+        str(row.get("runtime_version") or ""),
+    ]
+    concurrency = str(row.get("concurrency_label") or "")
+    if concurrency and concurrency not in ("nan", "n/a"):
+        parts.append(f"c={concurrency}")
+    return " | ".join(part for part in parts if part and part != "nan")
+
+
+def _log_rank(path: str, concurrency: str) -> tuple:
+    name = Path(path).name.lower()
+    score = 0
+    if concurrency not in ("", "nan", "n/a") and f"saturation_c{concurrency}.log" in name:
+        score += 100
+    if "full" in name:
+        score += 60
+    if "startup" in name:
+        score += 20
+    if "saturation" in name:
+        score += 10
+    return (-score, name)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _list_mlflow_logs(run_id: str, prefix: str, tracking_uri: str) -> list:
+    from mlflow.tracking import MlflowClient
+
+    client = MlflowClient(tracking_uri=tracking_uri)
+
+    def _walk(path: str):
+        for item in client.list_artifacts(run_id, path):
+            if item.is_dir:
+                yield from _walk(item.path)
+            elif item.path.endswith(".log"):
+                yield item.path
+
+    return list(_walk(prefix))
+
+
+def _mlflow_log_candidates(row: pd.Series) -> tuple:
+    run_id = str(row.get("mlflow_run_id") or "").strip()
+    if not MLFLOW_TRACKING_URI or not run_id or run_id.lower() == "nan":
+        return [], []
+    try:
+        paths = _list_mlflow_logs(
+            run_id, MLFLOW_LOG_ARTIFACT_PREFIX, MLFLOW_TRACKING_URI
+        )
+    except Exception as exc:
+        return [], [f"MLflow: {exc}"]
+    return [
+        {
+            "source": "mlflow",
+            "identifier": run_id,
+            "path": path,
+            "label": f"MLflow: {path}",
+        }
+        for path in paths
+    ], []
+
+
+def _local_log_candidates(row: pd.Series) -> tuple:
+    if not OMNI_LOG_DIR:
+        return [], []
+    root = Path(OMNI_LOG_DIR).expanduser()
+    if not root.is_dir():
+        return [], []
+    tokens = []
+    for key in ("run_name", "mlflow_run_id", "deployment_uuid"):
+        value = str(row.get(key) or "").strip()
+        if not value or value.lower() == "nan":
+            continue
+        tokens.append(value)
+        if key == "mlflow_run_id" and len(value) >= 8:
+            tokens.append(value[:8])
+    tokens = sorted(set(tokens))
+    if not tokens:
+        return [], []
+    try:
+        matches = [
+            path
+            for path in root.rglob("*.log")
+            if any(token in str(path) for token in tokens)
+        ]
+    except Exception as exc:
+        return [], [f"Local logs: {exc}"]
+    return [
+        {
+            "source": "local",
+            "identifier": str(path),
+            "path": str(path),
+            "label": f"Local: {path.relative_to(root)}",
+        }
+        for path in matches
+    ], []
+
+
+def _s3_log_candidates(row: pd.Series) -> tuple:
+    uuid = str(row.get("deployment_uuid") or "").strip()
+    if not S3_LOGS_BUCKET or not uuid or uuid.lower() == "nan":
+        return [], []
+    key = f"{S3_LOGS_PREFIX}{uuid}.log"
+    return [
+        {
+            "source": "s3",
+            "identifier": uuid,
+            "path": key,
+            "label": f"S3: {key}",
+        }
+    ], []
+
+
+def _log_candidates(row: pd.Series) -> tuple:
+    candidates = []
+    errors = []
+    for finder in (_mlflow_log_candidates, _local_log_candidates, _s3_log_candidates):
+        found, failure = finder(row)
+        candidates.extend(found)
+        errors.extend(failure)
+    concurrency = str(row.get("concurrency_label") or "")
+    candidates.sort(key=lambda item: _log_rank(item["path"], concurrency))
+    return candidates, errors
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _fetch_log(
+    source: str,
+    identifier: str,
+    path: str,
+    tracking_uri: str = "",
+    s3_bucket: str = "",
+    s3_region: str = "us-east-1",
+) -> str:
+    if source == "mlflow":
+        from mlflow.tracking import MlflowClient
+
+        client = MlflowClient(tracking_uri=tracking_uri)
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(client.download_artifacts(identifier, path, tmp))
+            return local.read_text(encoding="utf-8", errors="replace")
+
+    if source == "local":
+        return Path(path).read_text(encoding="utf-8", errors="replace")
+
+    if source == "s3":
+        import boto3
+        from botocore import UNSIGNED
+        from botocore.config import Config
+
+        if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+            client = boto3.client(
+                "s3",
+                region_name=s3_region,
+                aws_access_key_id=AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+            )
+        else:
+            client = boto3.client(
+                "s3", region_name=s3_region, config=Config(signature_version=UNSIGNED)
+            )
+        response = client.get_object(Bucket=s3_bucket, Key=path)
+        return response["Body"].read().decode("utf-8", errors="replace")
+
+    raise ValueError(f"Unknown log source: {source}")
+
+
+def _view_logs(df: pd.DataFrame):
+    st.subheader("📋 View Logs")
+
+    if "run_name" not in df.columns:
+        st.info("No run_name column is available in the data.")
+        return
+
+    logs_df = df.dropna(subset=["run_name"]).drop_duplicates(subset=["run_name"]).copy()
+    if logs_df.empty:
+        st.info("No runs with a run name are available in the current filters.")
+        return
+
+    selected_run = st.selectbox(
+        "Select a run to view its log:",
+        logs_df["run_name"].tolist(),
+        format_func=lambda name: _log_run_label(
+            logs_df.loc[logs_df["run_name"] == name].iloc[0]
+        ),
+        key="omni_log_run",
+    )
+    row = logs_df.loc[logs_df["run_name"] == selected_run].iloc[0]
+    run_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(selected_run))[:80]
+
+    candidates, errors = _log_candidates(row)
+    if errors:
+        with st.expander("Log source warnings", expanded=False):
+            for error in errors:
+                st.caption(error)
+
+    if not candidates:
+        st.info(
+            "No log source is configured for this run. Set MLFLOW_TRACKING_URI "
+            "(and credentials), OMNI_LOG_DIR, or S3_LOGS_BUCKET."
+        )
+        return
+
+    candidate_labels = [candidate["label"] for candidate in candidates]
+    if len(candidates) > 1:
+        selected_label = st.selectbox(
+            "Log file", candidate_labels, key=f"omni_log_file_{run_key}"
+        )
+    else:
+        selected_label = candidate_labels[0]
+    selected = next(
+        candidate for candidate in candidates if candidate["label"] == selected_label
+    )
+
+    if st.button(
+        "🔍 Fetch Log", type="primary", key=f"omni_fetch_log_{run_key}"
+    ):
+        st.session_state["omni_log_result"] = {
+            "run": selected_run,
+            "label": selected_label,
+            "content": None,
+            "error": None,
+        }
+        try:
+            content = _fetch_log(
+                selected["source"],
+                selected["identifier"],
+                selected["path"],
+                MLFLOW_TRACKING_URI,
+                S3_LOGS_BUCKET,
+                S3_REGION,
+            )
+            st.session_state["omni_log_result"]["content"] = content
+        except Exception as exc:
+            st.session_state["omni_log_result"]["error"] = str(exc)
+        st.session_state["omni_show_full_log"] = False
+
+    cached = st.session_state.get("omni_log_result")
+    if (
+        not cached
+        or cached.get("run") != selected_run
+        or cached.get("label") != selected_label
+    ):
+        st.caption(f"Source: {selected['label']}")
+        return
+
+    if cached.get("error"):
+        st.warning(f"Could not load log: {cached['error']}")
+        return
+
+    content = cached.get("content") or ""
+    startup_marker = "Application startup complete."
+    startup_pos = content.find(startup_marker)
+    show_full = st.session_state.get("omni_show_full_log", False)
+
+    if startup_pos != -1 and not show_full:
+        st.success(f"Log loaded for `{selected_run}` (startup only)")
+        st.text_area(
+            "Log output (startup)",
+            value=content[: startup_pos + len(startup_marker)],
+            height=300,
+            disabled=True,
+            key=f"omni_log_startup_{run_key}",
+        )
+        col_show, col_download = st.columns(2)
+        with col_show:
+            if st.button("📄 Show Full Log", key=f"omni_show_full_{run_key}"):
+                st.session_state["omni_show_full_log"] = True
+                st.rerun()
+        with col_download:
+            st.download_button(
+                "⬇️ Download Full Log",
+                data=content,
+                file_name=f"{run_key}.log",
+                mime="text/plain",
+                key=f"omni_download_log_{run_key}",
+            )
+    else:
+        st.success(f"Log loaded for `{selected_run}`")
+        st.text_area(
+            "Log output",
+            value=content,
+            height=500,
+            disabled=True,
+            key=f"omni_log_full_{run_key}",
+        )
+        st.download_button(
+            "⬇️ Download Full Log",
+            data=content,
+            file_name=f"{run_key}.log",
+            mime="text/plain",
+            key=f"omni_download_full_{run_key}",
+        )
+
+
 def _overview(df: pd.DataFrame):
     rows, models = len(df), df["model"].nunique()
     col1, col2, col3, col4 = st.columns(4)
@@ -491,11 +796,18 @@ def _render_section(section: str, df: pd.DataFrame):
             st.warning("No rows match the current filters.")
             return
         _filtered_data(filtered)
+    elif section == "📋 View Logs":
+        filtered = _main_filters(df)
+        if filtered.empty:
+            st.warning("No rows match the current filters.")
+            return
+        _view_logs(filtered)
     else:
         _placeholder(section)
 
 
 def render_omni_dashboard(csv_path: str = "datasets/omni/consolidated_dashboard_omni_sample.csv"):
+    csv_path = os.environ.get("OMNI_CSV_PATH", csv_path)
     st.header("vLLM-Omni Performance")
     st.caption(
         "Speech-in, speech-out, and text benchmarks. Overview is the default page; "

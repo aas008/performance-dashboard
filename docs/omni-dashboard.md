@@ -150,6 +150,14 @@ The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is 
 
 **Filtered Data** uses the same numbered filters and adds a CSV download. Other RHAIIS sections remain visible and show a placeholder until they are implemented.
 
+**View Logs** selects a run and fetches its log. Source priority:
+
+1. **MLflow artifacts** — when `MLFLOW_TRACKING_URI` and the row's `mlflow_run_id` are available. The artifact prefix defaults to `logs` (`MLFLOW_LOG_ARTIFACT_PREFIX`).
+2. **Local log directory** — `OMNI_LOG_DIR` (default `datasets/omni/logs`), matched by `run_name`, `mlflow_run_id`, or `deployment_uuid`.
+3. **S3** — `S3_LOGS_BUCKET` + `S3_LOGS_PREFIX` (default `logs/`), keyed by `deployment_uuid`.
+
+When the log contains `Application startup complete.`, the view shows startup output first, with **Show Full Log** and **Download Full Log** controls.
+
 ## Metric notes
 
 - TTS RTF: lower is better; `<1.0` is faster than real time. `audio_rtf_p95 > 1.0` is the first sign the tail is no longer real-time.

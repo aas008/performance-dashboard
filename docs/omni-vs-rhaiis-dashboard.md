@@ -42,7 +42,7 @@ Status: **draft checkpoint** — no final UX decisions below are implemented exc
 - Clicking points, or box/lasso-selecting an area, adds plot lines to the comparison.
 - A **Filtered Data for Plot Lines** section below the chart shows the source rows.
 
-**Filtered Data** uses the same numbered filters and adds a CSV download. Other RHAIIS sections remain visible and show a placeholder.
+**Filtered Data** uses the same numbered filters and adds a CSV download. **View Logs** loads a run's log from MLflow artifacts, a local log directory, or S3. Other RHAIIS sections remain visible and show a placeholder.
 
 ## What is left out when cloning RHAIIS for Omni
 
@@ -55,7 +55,7 @@ Status: **draft checkpoint** — no final UX decisions below are implemented exc
 | Competitive analysis / regression heatmap / release health | Text/LLM-specific. |
 | Cost analysis / energy computation | Could map later; no cost model for audio/ASR yet. |
 | IntelliConfig / Pareto / runtime server configs | RHAIIS deployment-config tooling; not part of the first Omni pass. |
-| View Logs | Omni logs are currently in MLflow, not exposed by the dashboard. |
+| View Logs | Implemented for Omni: MLflow artifacts, local log directory, or S3 by deployment UUID. |
 | Token-only metrics as primary axes | TTS uses audio TTFP/RTF/underrun; ASR uses WER/RTFx. |
 
 ## What is added on the Omni side
@@ -224,3 +224,15 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - Layout mirrors the RHAIIS screenshot: Accelerator in column 1, Input/Output in column 2, Version + Task in column 3, Load Generator + Model in column 4, TP in column 5.
 - Removed the extra caption so the section starts directly with the RHAIIS-style filter band.
 - Version options now cascade from Accelerator + Input/Output; Task, Load Generator, Model, and TP continue to cascade.
+
+## Checkpoint 7 — View Logs implemented
+
+- Added the Omni **View Logs** section under Tools.
+- Selects a run from the filtered rows and resolves log candidates in this order:
+  1. MLflow artifacts under `MLFLOW_LOG_ARTIFACT_PREFIX` (default `logs`) using `mlflow_run_id`.
+  2. Local `.log` files under `OMNI_LOG_DIR` matched by `run_name`, `mlflow_run_id`, or `deployment_uuid`.
+  3. S3 `S3_LOGS_PREFIX<deployment_uuid>.log` when `S3_LOGS_BUCKET` is set.
+- Multiple candidates show a log-file selector. The default ranking prefers the run's `saturation_cN.log`, then `*full.log`, then `*startup*.log`.
+- Shows startup-only output when `Application startup complete.` is present, with **Show Full Log** and **Download Full Log**.
+- Added a sanitized demo log at `datasets/omni/logs/demo-tts-c1.log` so the public sample row works without configuring a log backend.
+- Tested locally with the demo log: View Logs loads `demo-tts-c1`, shows the startup section, expands to the full log, and downloads it.

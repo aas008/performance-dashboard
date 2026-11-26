@@ -216,6 +216,8 @@ gpt-oss-dynamo-llmd/
 # Log files
 *.log
 logs/
+!datasets/omni/logs/
+!datasets/omni/logs/*.log
 
 # Cache directories
 .cache/

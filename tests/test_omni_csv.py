@@ -14,6 +14,7 @@ TEMPLATE = OMNI_DIR / "consolidated_dashboard_omni_template.csv"
 SAMPLE = OMNI_DIR / "consolidated_dashboard_omni_sample.csv"
 METADATA = OMNI_DIR / "consolidated_dashboard_omni_metadata.example.json"
 CONVERTER = ROOT / "manual_runs" / "scripts" / "build_consolidated_omni_csv.py"
+DEMO_LOG = OMNI_DIR / "logs" / "demo-tts-c1.log"
 
 REQUIRED = {"model", "task_type", "benchmark_tool", "load_generator"}
 
@@ -77,6 +78,13 @@ def test_sample_uses_placeholder_metadata():
     assert all(not row["deployment_uuid"] for row in rows)
     assert all(not row["mlflow_run_id"] for row in rows)
     assert all(row["image_tag"].startswith("example/") for row in rows)
+
+
+def test_demo_log_matches_sample_run():
+    rows = _read_csv(SAMPLE)
+    assert "demo-tts-c1" in {row["run_name"] for row in rows}
+    assert DEMO_LOG.exists()
+    assert "Application startup complete." in DEMO_LOG.read_text()
 
 
 def test_converter_smoke(tmp_path):
