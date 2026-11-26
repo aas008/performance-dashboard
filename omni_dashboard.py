@@ -331,16 +331,27 @@ def _log_run_label(row: pd.Series) -> str:
     return " | ".join(part for part in parts if part and part != "nan")
 
 
+def _log_kind(path: str) -> str:
+    name = Path(path).name.lower()
+    if "full" in name:
+        return "Full server log"
+    if "startup" in name:
+        return "Startup log"
+    if "saturation" in name:
+        return "Benchmark log"
+    return "Log"
+
+
 def _log_rank(path: str, concurrency: str) -> tuple:
     name = Path(path).name.lower()
     score = 0
-    if concurrency not in ("", "nan", "n/a") and f"saturation_c{concurrency}.log" in name:
-        score += 100
     if "full" in name:
+        score += 100
+    elif "startup" in name:
+        score += 80
+    elif "saturation" in name:
         score += 60
-    if "startup" in name:
-        score += 20
-    if "saturation" in name:
+    if concurrency not in ("", "nan", "n/a") and f"saturation_c{concurrency}.log" in name:
         score += 10
     return (-score, name)
 
@@ -376,7 +387,7 @@ def _mlflow_log_candidates(row: pd.Series) -> tuple:
             "source": "mlflow",
             "identifier": run_id,
             "path": path,
-            "label": f"MLflow: {path}",
+            "label": f"MLflow: {_log_kind(path)} ({path})",
         }
         for path in paths
     ], []
@@ -412,7 +423,7 @@ def _local_log_candidates(row: pd.Series) -> tuple:
             "source": "local",
             "identifier": str(path),
             "path": str(path),
-            "label": f"Local: {path.relative_to(root)}",
+            "label": f"Local: {_log_kind(path)} ({path.relative_to(root)})",
         }
         for path in matches
     ], []
@@ -428,7 +439,7 @@ def _s3_log_candidates(row: pd.Series) -> tuple:
             "source": "s3",
             "identifier": uuid,
             "path": key,
-            "label": f"S3: {key}",
+            "label": f"S3: {_log_kind(key)} ({key})",
         }
     ], []
 
@@ -570,37 +581,14 @@ def _view_logs(df: pd.DataFrame):
         return
 
     content = cached.get("content") or ""
-    startup_marker = "Application startup complete."
-    startup_pos = content.find(startup_marker)
-
-    startup_only = False
-    if startup_pos != -1:
-        startup_only = st.toggle(
-            "Startup only",
-            value=False,
-            key=f"omni_startup_only_{run_key}",
-            help="Show only the lines up to the startup marker.",
-        )
-
-    if startup_only:
-        st.success(f"Log loaded for `{selected_run}` (startup only)")
-        st.text_area(
-            "Log output (startup)",
-            value=content[: startup_pos + len(startup_marker)],
-            height=300,
-            disabled=True,
-            key=f"omni_log_startup_{run_key}",
-        )
-    else:
-        st.success(f"Log loaded for `{selected_run}`")
-        st.text_area(
-            "Log output",
-            value=content,
-            height=500,
-            disabled=True,
-            key=f"omni_log_full_{run_key}",
-        )
-
+    st.success(f"Log loaded for `{selected_run}`")
+    st.text_area(
+        "Log output",
+        value=content,
+        height=600,
+        disabled=True,
+        key=f"omni_log_full_{run_key}",
+    )
     st.download_button(
         "⬇️ Download Full Log",
         data=content,
