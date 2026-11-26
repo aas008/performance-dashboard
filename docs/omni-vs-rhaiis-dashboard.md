@@ -239,7 +239,7 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 
 ## Checkpoint 8 — Compare Versions implemented
 
-- Added baseline/comparison version selectors with a swap button, plus task-type, model, metric, and concurrency selectors.
+- Added baseline/comparison version selectors with a swap button, plus task-type, model, and metric selectors. All common concurrency levels are used automatically.
 - The task-type selector cascades into model and metric options. Rows are always matched on `task_type`, so TTS and ASR/STT tasks are compared separately and never mixed.
 - Added the RHAIIS-style context title (`GPU / Task / Dataset`), **Comparing:** line, and “How are these calculated?” popover.
 - Added a model-level summary table with 🟢 Better / 🟡 Flat / 🔴 Worse cells. Each cell is the geometric mean of per-concurrency deltas; the table is the primary output, like RHAIIS.
@@ -252,7 +252,7 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
   - Swap: all verdicts flipped to Worse.
   - Lower-is-better metric: signs and colors flipped correctly.
   - `vllm-omni-3.5-ea2` vs `vllm-omni-v0.24.0`: 5 models and 25 comparisons rendered in the summary table.
-  - Concurrency subset: removing c1 and c25 reduced the comparison count to 15.
+  - All common concurrency levels are used automatically (c1/c4/c8/c16 for the 3.5 → 3.6 comparison).
   - Same-version and one-version datasets show clear warnings.
 
 ## Checkpoint 9 — task selector and dummy STT data
@@ -278,3 +278,10 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - Comparisons are filtered to the selected load generator before matching, so GuideLLM, vLLM-Omni bench serve, and offline results are never mixed.
 - Default preference: vLLM-Omni bench serve for TTS tasks, GuideLLM otherwise, offline only when it is the sole option.
 - Tested: ASR selection defaults to GuideLLM and shows only GuideLLM rows; switching to offline exposes WER and shows only offline rows.
+
+## Checkpoint 11 — all common concurrency levels
+
+- Removed the concurrency multiselect from Compare Versions.
+- The page now uses every common concurrency level for the selected versions, tasks, load generator, and models.
+- A caption lists the concurrency levels in use.
+- This keeps the page simpler and matches the “compare everything common” behavior.

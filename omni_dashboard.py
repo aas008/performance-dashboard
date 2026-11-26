@@ -127,25 +127,120 @@ OMNI_X_AXES = {
     "Model": "model",
 }
 
-OMNI_COMPARE_DIRECTIONS = {
-    "request_throughput_rps": ("higher", ".2f"),
-    "audio_throughput_x": ("higher", ".2f"),
-    "output_token_throughput": ("higher", ".2f"),
-    "total_token_throughput": ("higher", ".2f"),
-    "audio_rtf_mean": ("lower", ".4f"),
-    "audio_rtf_p95": ("lower", ".4f"),
-    "audio_ttfp_ms_mean": ("lower", ".1f"),
-    "audio_ttfp_ms_p95": ("lower", ".1f"),
-    "audio_underrun_s_mean": ("lower", ".3f"),
-    "audio_underrun_s_p95": ("lower", ".3f"),
-    "ttft_ms_median": ("lower", ".1f"),
-    "tpot_ms_median": ("lower", ".2f"),
-    "itl_ms_median": ("lower", ".2f"),
-    "e2el_ms_median": ("lower", ".1f"),
-    "wer": ("lower", ".4f"),
-    "rtfx": ("higher", ".2f"),
-    "transcription_throughput_utterances_s": ("higher", ".2f"),
+COMPARE_STATISTICS = ["Mean", "Median", "P95", "P99"]
+
+COMPARE_METRIC_FAMILIES = {
+    "Request throughput": {
+        "short": "Req/s",
+        "direction": "higher",
+        "column": "request_throughput_rps",
+    },
+    "Audio throughput": {
+        "short": "Audio tput",
+        "direction": "higher",
+        "column": "audio_throughput_x",
+    },
+    "Output token throughput": {
+        "short": "Out tok/s",
+        "direction": "higher",
+        "column": "output_token_throughput",
+    },
+    "Total token throughput": {
+        "short": "Total tok/s",
+        "direction": "higher",
+        "column": "total_token_throughput",
+    },
+    "Audio RTF": {
+        "short": "RTF",
+        "direction": "lower",
+        "columns": {
+            "Mean": "audio_rtf_mean",
+            "Median": "audio_rtf_median",
+            "P95": "audio_rtf_p95",
+            "P99": "audio_rtf_p99",
+        },
+    },
+    "Audio TTFP": {
+        "short": "TTFP",
+        "direction": "lower",
+        "columns": {
+            "Mean": "audio_ttfp_ms_mean",
+            "Median": "audio_ttfp_ms_median",
+            "P95": "audio_ttfp_ms_p95",
+            "P99": "audio_ttfp_ms_p99",
+        },
+    },
+    "Audio underrun": {
+        "short": "Underrun",
+        "direction": "lower",
+        "columns": {
+            "Mean": "audio_underrun_s_mean",
+            "Median": "audio_underrun_s_median",
+            "P95": "audio_underrun_s_p95",
+            "P99": "audio_underrun_s_p99",
+        },
+    },
+    "TTFT": {
+        "short": "TTFT",
+        "direction": "lower",
+        "columns": {
+            "Mean": "ttft_ms_mean",
+            "Median": "ttft_ms_median",
+            "P95": "ttft_ms_p95",
+            "P99": "ttft_ms_p99",
+        },
+    },
+    "TPOT": {
+        "short": "TPOT",
+        "direction": "lower",
+        "columns": {
+            "Mean": "tpot_ms_mean",
+            "Median": "tpot_ms_median",
+            "P95": "tpot_ms_p95",
+            "P99": "tpot_ms_p99",
+        },
+    },
+    "ITL": {
+        "short": "ITL",
+        "direction": "lower",
+        "columns": {
+            "Mean": "itl_ms_mean",
+            "Median": "itl_ms_median",
+            "P95": "itl_ms_p95",
+            "P99": "itl_ms_p99",
+        },
+    },
+    "End-to-end latency": {
+        "short": "E2EL",
+        "direction": "lower",
+        "columns": {
+            "Mean": "e2el_ms_mean",
+            "Median": "e2el_ms_median",
+            "P95": "e2el_ms_p95",
+            "P99": "e2el_ms_p99",
+        },
+    },
+    "WER": {"short": "WER", "direction": "lower", "column": "wer"},
+    "RTFx": {"short": "RTFx", "direction": "higher", "column": "rtfx"},
+    "Transcription throughput": {
+        "short": "STT utt/s",
+        "direction": "higher",
+        "column": "transcription_throughput_utterances_s",
+    },
 }
+
+COMPARE_SUMMARY_FAMILIES = [
+    "Request throughput",
+    "Audio throughput",
+    "Audio RTF",
+    "Audio TTFP",
+    "Audio underrun",
+    "TTFT",
+    "TPOT",
+    "WER",
+    "RTFx",
+    "Transcription throughput",
+]
 
 COMPARE_KEYS = [
     "model",
@@ -157,20 +252,6 @@ COMPARE_KEYS = [
     "accelerator",
 ]
 COMPARE_FLAT_THRESHOLD_PCT = 1.0
-
-OMNI_COMPARE_SUMMARY_METRICS = {
-    "Req/s": "Request throughput (req/s)",
-    "Audio tput": "Audio throughput (audio-s/s)",
-    "RTF mean": "Audio RTF mean",
-    "RTF P95": "Audio RTF P95",
-    "TTFP mean": "Audio TTFP mean (ms)",
-    "Underrun": "Audio underrun mean (s)",
-    "TTFT median": "TTFT median (ms)",
-    "TPOT median": "TPOT median (ms)",
-    "WER": "WER",
-    "RTFx": "RTFx",
-    "STT utt/s": "Transcription throughput (utt/s)",
-}
 
 # Same navigation groups/labels as the RHAIIS shell. Pages that are not yet
 # implemented for Omni render a clear placeholder rather than disappearing.
@@ -975,6 +1056,113 @@ def _comparison_table_for_task(
     return merged
 
 
+def _family_statistics(
+    family: str, base_df: pd.DataFrame, comparison_df: pd.DataFrame
+) -> list:
+    config = COMPARE_METRIC_FAMILIES[family]
+    if "columns" not in config:
+        return []
+    return [
+        statistic
+        for statistic in COMPARE_STATISTICS
+        if (
+            config["columns"].get(statistic)
+            and base_df[config["columns"][statistic]].notna().any()
+            and comparison_df[config["columns"][statistic]].notna().any()
+        )
+    ]
+
+
+def _family_available(
+    family: str, base_df: pd.DataFrame, comparison_df: pd.DataFrame
+) -> bool:
+    config = COMPARE_METRIC_FAMILIES[family]
+    if "columns" in config:
+        return bool(_family_statistics(family, base_df, comparison_df))
+    column = config["column"]
+    return base_df[column].notna().any() and comparison_df[column].notna().any()
+
+
+def _family_available_for_statistic(
+    family: str,
+    base_df: pd.DataFrame,
+    comparison_df: pd.DataFrame,
+    statistic: str | None,
+) -> bool:
+    config = COMPARE_METRIC_FAMILIES[family]
+    if "columns" not in config:
+        return _family_available(family, base_df, comparison_df)
+    column = config["columns"].get(statistic)
+    return bool(
+        column
+        and base_df[column].notna().any()
+        and comparison_df[column].notna().any()
+    )
+
+
+def _summary_statistics(
+    base_df: pd.DataFrame, comparison_df: pd.DataFrame
+) -> list:
+    statistics = []
+    for statistic in COMPARE_STATISTICS:
+        for family in COMPARE_SUMMARY_FAMILIES:
+            config = COMPARE_METRIC_FAMILIES[family]
+            if "columns" not in config:
+                continue
+            column = config["columns"].get(statistic)
+            if (
+                column
+                and base_df[column].notna().any()
+                and comparison_df[column].notna().any()
+            ):
+                statistics.append(statistic)
+                break
+    return statistics
+
+
+def _default_compare_statistic(
+    base_df: pd.DataFrame,
+    comparison_df: pd.DataFrame,
+    statistics: list,
+) -> str | None:
+    if not statistics:
+        return None
+    tasks = set(base_df["task_type"].dropna().astype(str))
+    if tasks & {"voice_clone", "default_voice", "voice_design"}:
+        family = "Audio RTF"
+    elif tasks and tasks <= {"text_to_text"}:
+        family = "TTFT"
+    else:
+        family = None
+    if family:
+        available = _family_statistics(family, base_df, comparison_df)
+        if "P95" in available:
+            return "P95"
+        if "Mean" in available:
+            return "Mean"
+        if available:
+            return available[0]
+    if "P95" in statistics:
+        return "P95"
+    if "Mean" in statistics:
+        return "Mean"
+    return statistics[0]
+
+
+def _family_column(family: str, statistic: str | None) -> str | None:
+    config = COMPARE_METRIC_FAMILIES[family]
+    if "columns" in config:
+        return config["columns"].get(statistic)
+    return config["column"]
+
+
+def _family_label(family: str, statistic: str | None) -> str:
+    config = COMPARE_METRIC_FAMILIES[family]
+    if "columns" in config and statistic:
+        return f"{family} ({statistic})"
+    return family
+
+
 def _aggregate_delta(detail: pd.DataFrame) -> float:
     deltas = detail["delta_pct"].dropna() / 100.0
     if deltas.empty:
@@ -986,7 +1174,9 @@ def _aggregate_delta(detail: pd.DataFrame) -> float:
 
 
 def _model_comparison_summary(
-    base_df: pd.DataFrame, comparison_df: pd.DataFrame
+    base_df: pd.DataFrame,
+    comparison_df: pd.DataFrame,
+    statistic: str | None,
 ) -> pd.DataFrame:
     core_group_keys = [
         "model",
@@ -995,21 +1185,34 @@ def _model_comparison_summary(
         "tp",
         "accelerator",
     ]
-    metric_labels = [
-        (short, label)
-        for short, label in OMNI_COMPARE_SUMMARY_METRICS.items()
-        if base_df[OMNI_METRICS[label]].notna().any()
-        and comparison_df[OMNI_METRICS[label]].notna().any()
-    ]
-    if not metric_labels:
+    metric_columns = []
+    for family in COMPARE_SUMMARY_FAMILIES:
+        config = COMPARE_METRIC_FAMILIES[family]
+        if "columns" in config:
+            column = config["columns"].get(statistic)
+            if (
+                not column
+                or not base_df[column].notna().any()
+                or not comparison_df[column].notna().any()
+            ):
+                continue
+            header = f"{config['short']} {statistic}"
+        else:
+            column = config["column"]
+            if (
+                not base_df[column].notna().any()
+                or not comparison_df[column].notna().any()
+            ):
+                continue
+            header = config["short"]
+        metric_columns.append((header, column, config["direction"]))
+    if not metric_columns:
         return pd.DataFrame()
 
     groups = {}
     cells = {}
-    for short, label in metric_labels:
-        metric = OMNI_METRICS[label]
-        direction, _ = OMNI_COMPARE_DIRECTIONS.get(metric, ("higher", ".2f"))
-        detail = _comparison_table(base_df, comparison_df, metric, direction)
+    for header, column, direction in metric_columns:
+        detail = _comparison_table(base_df, comparison_df, column, direction)
         if detail.empty:
             continue
         group_keys = [key for key in core_group_keys if key in detail.columns]
@@ -1024,15 +1227,15 @@ def _model_comparison_summary(
                 groups[group] = {key: meta[key] for key in group_keys}
             delta = _aggregate_delta(subset)
             if pd.isna(delta):
-                cells[(group, short)] = "⚪ N/A"
+                cells[(group, header)] = "⚪ N/A"
             elif abs(delta) < COMPARE_FLAT_THRESHOLD_PCT:
-                cells[(group, short)] = f"🟡 {delta:+.1f}%"
+                cells[(group, header)] = f"🟡 {delta:+.1f}%"
             elif (direction == "higher" and delta > 0) or (
                 direction == "lower" and delta < 0
             ):
-                cells[(group, short)] = f"🟢 {delta:+.1f}%"
+                cells[(group, header)] = f"🟢 {delta:+.1f}%"
             else:
-                cells[(group, short)] = f"🔴 {delta:+.1f}%"
+                cells[(group, header)] = f"🔴 {delta:+.1f}%"
 
     rows = []
     for group, meta in groups.items():
@@ -1047,8 +1250,8 @@ def _model_comparison_summary(
             row["Load generator"] = meta["load_generator"]
         if "accelerator" in meta:
             row["GPU"] = meta["accelerator"]
-        for short, _ in metric_labels:
-            row[short] = cells.get((group, short), "⚪ N/A")
+        for header, _, _ in metric_columns:
+            row[header] = cells.get((group, header), "⚪ N/A")
         rows.append(row)
 
     summary = pd.DataFrame(rows)
@@ -1058,17 +1261,19 @@ def _model_comparison_summary(
     return summary
 
 
-def _default_compare_metric(frame: pd.DataFrame) -> str:
+def _default_compare_family(frame: pd.DataFrame, options: list) -> str:
     tasks = set(frame["task_type"].dropna().astype(str))
     if tasks and tasks <= {"asr_transcription"}:
-        if frame["wer"].notna().any():
+        if "WER" in options and frame["wer"].notna().any():
             return "WER"
-        return "RTFx"
+        if "RTFx" in options:
+            return "RTFx"
     if tasks & {"voice_clone", "default_voice", "voice_design"}:
-        if frame["audio_rtf_p95"].notna().any():
-            return "Audio RTF P95"
-        return "Request throughput (req/s)"
-    return "Request throughput (req/s)"
+        if "Audio RTF" in options:
+            return "Audio RTF"
+    if "Request throughput" in options:
+        return "Request throughput"
+    return options[0] if options else ""
 
 
 def _compare_versions(df: pd.DataFrame):
@@ -1148,7 +1353,9 @@ def _compare_versions(df: pd.DataFrame):
             label for label in st.session_state[task_key] if label in task_labels
         ]
 
-    col_task, col_loadgen, col_models, col_metric = st.columns([2, 2, 2, 2])
+    col_task, col_loadgen, col_models, col_stat, col_metric = st.columns(
+        [2, 2, 2, 1.3, 1.7]
+    )
     with col_task:
         selected_task_labels = st.multiselect(
             "Tasks",
@@ -1248,22 +1455,54 @@ def _compare_versions(df: pd.DataFrame):
 
     base = base_load[base_load["model"].isin(models)]
     comparison = comparison_load[comparison_load["model"].isin(models)]
+
+    summary_statistics = _summary_statistics(base, comparison)
+    statistic = None
+    if summary_statistics:
+        preferred_statistic = _default_compare_statistic(
+            base, comparison, summary_statistics
+        )
+        stat_key = _selection_key(
+            "omni_compare_stat",
+            baseline,
+            candidate,
+            selected_tasks,
+            models,
+            [load_generator],
+        )
+        if st.session_state.get(stat_key) not in summary_statistics:
+            st.session_state.pop(stat_key, None)
+        with col_stat:
+            statistic = st.selectbox(
+                "Statistic",
+                summary_statistics,
+                index=summary_statistics.index(preferred_statistic),
+                key=stat_key,
+                help=(
+                    "Mean, Median, P95, or P99 where available. Throughput, "
+                    "WER, RTFx, and transcription throughput are single values."
+                ),
+            )
+    else:
+        with col_stat:
+            st.caption("Statistic: single value")
+
     metric_options = [
-        label
-        for label, column in OMNI_METRICS.items()
-        if base[column].notna().any() and comparison[column].notna().any()
+        family
+        for family in COMPARE_METRIC_FAMILIES
+        if _family_available_for_statistic(family, base, comparison, statistic)
     ]
     if not metric_options:
         st.warning(
             f"No comparable metrics found between {baseline} and {candidate} "
-            "for the selected tasks and models."
+            "for the selected tasks, load generator, models, and statistic."
         )
         return
 
-    preferred_metric = _default_compare_metric(base)
+    preferred_family = _default_compare_family(base, metric_options)
     metric_index = (
-        metric_options.index(preferred_metric)
-        if preferred_metric in metric_options
+        metric_options.index(preferred_family)
+        if preferred_family in metric_options
         else 0
     )
     metric_key = _selection_key(
@@ -1273,14 +1512,24 @@ def _compare_versions(df: pd.DataFrame):
         selected_tasks,
         models,
         [load_generator],
+        [statistic or "single"],
     )
+    if st.session_state.get(metric_key) not in metric_options:
+        st.session_state.pop(metric_key, None)
     with col_metric:
-        metric_label = st.selectbox(
+        metric_family = st.selectbox(
             "Metric",
             metric_options,
             index=metric_index,
             key=metric_key,
         )
+
+    metric = _family_column(metric_family, statistic)
+    if not metric:
+        st.warning("The selected metric does not have the chosen statistic.")
+        return
+    metric_label = _family_label(metric_family, statistic)
+    direction = COMPARE_METRIC_FAMILIES[metric_family]["direction"]
 
     base_concurrency = set(base["concurrency_label"].dropna().astype(str))
     comparison_concurrency = set(
@@ -1292,33 +1541,12 @@ def _compare_versions(df: pd.DataFrame):
     if not common_concurrency:
         st.warning("No common concurrency levels found for both versions.")
         return
-    concurrency_key = _selection_key(
-        "omni_compare_concurrency",
-        baseline,
-        candidate,
-        selected_tasks,
-        models,
-        [load_generator],
+    st.caption(
+        "Using all common concurrency levels: " + ", ".join(common_concurrency)
     )
-    if concurrency_key in st.session_state:
-        st.session_state[concurrency_key] = [
-            value
-            for value in st.session_state[concurrency_key]
-            if value in common_concurrency
-        ]
-    selected_concurrency = st.multiselect(
-        "Concurrency levels",
-        common_concurrency,
-        default=common_concurrency,
-        key=concurrency_key,
-        help="Concurrency levels included in the summary, chart, and details.",
-    )
-    if not selected_concurrency:
-        st.warning("Select at least one concurrency level.")
-        return
-    base = base[base["concurrency_label"].astype(str).isin(selected_concurrency)]
+    base = base[base["concurrency_label"].astype(str).isin(common_concurrency)]
     comparison = comparison[
-        comparison["concurrency_label"].astype(str).isin(selected_concurrency)
+        comparison["concurrency_label"].astype(str).isin(common_concurrency)
     ]
 
     context_parts = []
@@ -1354,6 +1582,8 @@ def _compare_versions(df: pd.DataFrame):
                 "baseline.\n\n"
                 "**Summary:** each cell is the geometric mean of the per-concurrency "
                 "deltas for that model/configuration.\n\n"
+                "**Statistic:** Mean, Median, P95, or P99 where available. Throughput, "
+                "WER, RTFx, and transcription throughput are single values.\n\n"
                 "**Verdicts:** 🟢 Better, 🟡 Flat (±1%), 🔴 Worse. Verdicts account for "
                 "metric direction: for lower-is-better metrics, a negative delta is better."
             )
@@ -1362,11 +1592,14 @@ def _compare_versions(df: pd.DataFrame):
         "Each version/model/configuration is matched on common concurrency levels. "
         "Summary cells use the geometric mean of per-concurrency deltas. Only the "
         "selected load generator is used; results from different load generators "
-        "are never mixed."
+        "are never mixed. "
+        + (
+            f"Statistic: {statistic} where available."
+            if statistic
+            else "Statistic: single values only."
+        )
     )
 
-    metric = OMNI_METRICS[metric_label]
-    direction, _ = OMNI_COMPARE_DIRECTIONS.get(metric, ("higher", ".2f"))
     detail = _comparison_table(base, comparison, metric, direction)
     if detail.empty:
         st.warning(
@@ -1374,7 +1607,7 @@ def _compare_versions(df: pd.DataFrame):
         )
         return
 
-    summary = _model_comparison_summary(base, comparison)
+    summary = _model_comparison_summary(base, comparison, statistic)
     st.subheader("Version comparison summary")
     if summary.empty:
         st.info(
