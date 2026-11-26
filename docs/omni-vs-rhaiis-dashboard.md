@@ -5,7 +5,7 @@ Status: **draft checkpoint** — no final UX decisions below are implemented exc
 ## What was compared
 
 - RHAIIS view: left-panel navigation; Performance Plots filters and chart interactions.
-- Omni view: left-panel filter block; Overview/Throughput/Speech Out/Text Latency/ASR Quality/Data tabs.
+- Omni view at comparison time: left-panel filter block and tabs (replaced in Checkpoint 4).
 - Both tested locally through WebBridge against the same running Streamlit app.
 
 ## RHAIIS experience (current)
@@ -31,19 +31,18 @@ Status: **draft checkpoint** — no final UX decisions below are implemented exc
 
 ## Omni experience (current)
 
-**Left panel is the filter block:**
+**Left panel is the RHAIIS navigation shell** (Dashboard, Performance Analysis, Insights, Tools).
 
-- Modality
-- Task type
-- Load generator
-- Model
-- Runtime version
-- Accelerator
-- Concurrency
+**Overview is the default page** and shows headline metrics plus a coverage table, with no filter panel.
 
-**Main content:** Overview, Throughput, Speech Out, Text Latency, ASR Quality, Data.
+**Performance Plots**:
+- RHAIIS-style numbered filters in the main content.
+- X-axis (`Concurrency` / `Model`), Y-axis metric, and a max-concurrency selector.
+- One Plotly line chart using the RHAIIS `plotly_white_light` template, markers, right-side legend, 560px height, and RHAIIS margins.
+- Clicking points, or box/lasso-selecting an area, adds plot lines to the comparison.
+- A **Filtered Data for Plot Lines** section below the chart shows the source rows.
 
-Charts are display-only today; there is no click-to-select/filtered-data behavior. The Data tab shows the filtered table and download.
+**Filtered Data** uses the same numbered filters and adds a CSV download. Other RHAIIS sections remain visible and show a placeholder.
 
 ## What is left out when cloning RHAIIS for Omni
 
@@ -117,7 +116,7 @@ Auto-fill rule:
 | WebBridge: switch RHAIIS → Omni | Both views render; view selector shows five dashboards. |
 | WebBridge: RHAIIS Performance Plots | Numbered filters found; chart and Filtered Data for Plot Lines section present. |
 | WebBridge: Omni sidebar | Found Modality, Task type, Load generator, Model, Runtime version, Accelerator, Concurrency. |
-| WebBridge: Omni tabs | Six tabs present; 16 Plotly charts across tabs. |
+| WebBridge: Omni tabs (pre-Checkpoint 4) | Six tabs present; 16 Plotly charts across tabs. |
 | Omni offline row display | HF ASR row now shows `offline`, not the HF scorer as a load generator. |
 | Auto-fill model filter | **Implemented** — TTS/ASR/text paths tested. |
 | Omni graph click → filtered data | **Implemented** — point/box/lasso line selection and ASR bar selection tested. |
@@ -126,18 +125,18 @@ Auto-fill rule:
 ## Open questions
 
 1. ~~**Left panel:** keep the RHAIIS navigation in Omni and move filters into main content, or keep filter-only sidebar?~~ **Closed — keep the RHAIIS navigation; filters moved into main content.**
-2. **Pages:** which RHAIIS pages should Omni clone — Overview, Performance Plots, Compare Versions, Performance Trends, Model Comparison, Filtered Data? Which can be left out for now?
+2. **Pages:** which RHAIIS pages should Omni clone — Overview, Performance Plots, Compare Versions, Performance Trends, Model Comparison, Filtered Data? Which can be left out for now? *Implemented so far: Overview, Performance Plots, Filtered Data.*
 3. **Filter order:** is the proposed order (Accelerator → Version → Input/Output → Task → Load gen → Model → TP → Concurrency) correct, or should Input/Output come first for TTS/ASR users?
 4. **Auto-fill semantics:** auto-select all available models, or only narrow the options and let the user choose?
 5. **Modality vs Input/Output:** replace `Modality` with the input→output pair, or keep both?
 6. **TP:** include TP in the Omni UI? Current data is all TP=1.
 7. **Version label:** show product `runtime_version` (`3.6 GA`, `3.6-fast2`) or component versions (`vllm`, `vllm-omni`) in the main filter?
-8. **Graph selection:** should clicking add plot lines like RHAIIS, filter the whole dashboard, or just open a filtered table?
-9. **Filtered data:** one global section or per-chart “Filtered Data for Plot Lines” sections?
+8. **Graph selection:** should clicking add plot lines like RHAIIS, filter the whole dashboard, or just open a filtered table? *Currently matches RHAIIS: click/box/lasso adds plot lines.*
+9. ~~**Filtered data:** one global section or per-chart “Filtered Data for Plot Lines” sections?~~ **Closed — per-chart section on Performance Plots plus the global Filtered Data page.**
 10. **Offline ASR:** should offline rows appear in concurrency/throughput charts with `n/a`, or only in the ASR quality tab?
 11. **Locale:** drop `locale` and use `language` for TTS/ASR, or keep both?
 12. **Dataset identity:** keep `dataset_split`/`locale`, or simplify to `dataset` + `language` with config/split/revision in `extra_json.dataset_variant`?
-13. **Navigation tabs:** keep the six Omni tabs, or rename them to RHAIIS-style sections?
+13. ~~**Navigation tabs:** keep the six Omni tabs, or rename them to RHAIIS-style sections?~~ **Closed — tabs removed; Omni uses the RHAIIS nav sections and a single RHAIIS-style chart per metric pair.**
 
 ## Closed decisions
 
@@ -151,13 +150,13 @@ Auto-fill rule:
 
 ## Implementation checklist
 
-- [ ] Decide Q1/Q2 (navigation/page scope).
-- [ ] Reorder filters and add Input/Output.
-- [ ] Implement cascading task/load-generator/model options.
-- [ ] Auto-select models for selected modality/task.
-- [ ] Add graph point/box/lasso selection and filtered-data sections.
-- [ ] Keep the global Filtered Data download.
-- [ ] Test TTS and ASR journeys through WebBridge.
+- [x] Decide Q1/Q2 (navigation/page scope).
+- [x] Reorder filters and add Input/Output.
+- [x] Implement cascading task/load-generator/model options.
+- [x] Auto-select models for selected modality/task.
+- [x] Add graph point/box/lasso selection and filtered-data sections.
+- [x] Keep the global Filtered Data download.
+- [x] Test TTS and ASR journeys through WebBridge.
 - [ ] Update this document with closed questions and screenshots.
 
 ## Checkpoint 2 — implemented and tested
@@ -191,3 +190,23 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - Moved the Omni filters into the main content as a RHAIIS-style numbered “Filter Your Data” section.
 - Kept unimplemented RHAIIS pages visible with a clear placeholder.
 - Tested: nav groups render; Performance Plots opens the Throughput/Speech Out/Text Latency/ASR Quality tabs; Filtered Data opens the table/download; Cost Analysis shows the placeholder; TTS auto-fill still narrows to the TTS model; ASR bar selection opens the filtered-data table.
+
+## Checkpoint 4 — Overview default + RHAIIS-style Performance Plots
+
+- **Overview is the clean default**: headline metrics and coverage table, no filter panel.
+- **Performance Plots rebuilt as one RHAIIS-style chart**:
+  - numbered filters remain in main content;
+  - `Select X-Axis` (`Concurrency` / `Model`), `Select Y-Axis` (throughput, audio RTF/TTFP/underrun, text latency, WER/RTFx), and `Show concurrency up to`;
+  - `px.line(..., template="plotly_white_light", markers=True, custom_data=...)`;
+  - RHAIIS trace styling (line width 2, marker size 10, white marker outline) and layout (height 560, margins 80/250/110/60);
+  - point click and box/lasso selection add plot lines;
+  - `Filtered Data for Plot Lines` table and `Clear comparison`.
+- **Filtered Data page** keeps the numbered filters, table, and CSV download.
+- Removed the old Throughput / Speech Out / Text Latency / ASR Quality tabs and their unused chart helpers.
+- WebBridge tests:
+  - Overview loads with no filters and shows the coverage table;
+  - Performance Plots renders one Plotly chart with the RHAIIS template and legend;
+  - clicking a TTS point adds its line and shows the filtered table;
+  - switching Y-axis to `Audio RTF P95` re-renders the chart and prunes concurrency options;
+  - `Clear comparison` resets the selection;
+  - `WER` with `Concurrency` X-axis shows a clear no-data message; switching X-axis to `Model` renders the offline ASR point.

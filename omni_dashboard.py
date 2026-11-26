@@ -14,7 +14,12 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.io as pio
 import streamlit as st
+
+if "plotly_white_light" not in pio.templates:
+    pio.templates["plotly_white_light"] = pio.templates["plotly_white"]
+pio.templates.default = "plotly_white_light"
 
 # Configure logging
 logging.basicConfig(
@@ -61,6 +66,31 @@ PLOT_CUSTOM_DATA = [
     "load_generator",
     "concurrency_label",
 ]
+
+OMNI_METRICS = {
+    "Request throughput (req/s)": "request_throughput_rps",
+    "Audio throughput (audio-s/s)": "audio_throughput_x",
+    "Output token throughput (tok/s)": "output_token_throughput",
+    "Total token throughput (tok/s)": "total_token_throughput",
+    "Audio RTF mean": "audio_rtf_mean",
+    "Audio RTF P95": "audio_rtf_p95",
+    "Audio TTFP mean (ms)": "audio_ttfp_ms_mean",
+    "Audio TTFP P95 (ms)": "audio_ttfp_ms_p95",
+    "Audio underrun mean (s)": "audio_underrun_s_mean",
+    "Audio underrun P95 (s)": "audio_underrun_s_p95",
+    "TTFT median (ms)": "ttft_ms_median",
+    "TPOT median (ms)": "tpot_ms_median",
+    "ITL median (ms)": "itl_ms_median",
+    "End-to-end median (ms)": "e2el_ms_median",
+    "WER": "wer",
+    "RTFx": "rtfx",
+    "Transcription throughput (utt/s)": "transcription_throughput_utterances_s",
+}
+
+OMNI_X_AXES = {
+    "Concurrency": "concurrency",
+    "Model": "model",
+}
 
 # Same navigation groups/labels as the RHAIIS shell. Pages that are not yet
 # implemented for Omni render a clear placeholder rather than disappearing.
@@ -289,75 +319,6 @@ def _render_sidebar_nav() -> str:
     return st.session_state.omni_active_section
 
 
-def _selected_rows(sub: pd.DataFrame, event) -> Optional[pd.DataFrame]:
-    selection = getattr(event, "selection", None)
-    if selection is None:
-        return None
-    points = selection.get("points", []) if isinstance(selection, dict) else getattr(selection, "points", [])
-    selected = set()
-    for point in points or []:
-        custom = point.get("customdata") if isinstance(point, dict) else getattr(point, "customdata", None)
-        if custom and len(custom) >= len(PLOT_CUSTOM_DATA):
-            selected.add(tuple(str(value) for value in custom[: len(PLOT_CUSTOM_DATA)]))
-    if not selected:
-        return None
-
-    def _matches(row):
-        return (
-            str(row["model"]), str(row["runtime_version"]),
-            str(row["load_generator"]), str(row["concurrency_label"]),
-        ) in selected
-
-    return sub[sub.apply(_matches, axis=1)]
-
-
-def _show_selected_rows(sub: pd.DataFrame, event):
-    selected = _selected_rows(sub, event)
-    if selected is None or selected.empty:
-        return
-    with st.expander("📄 Filtered Data for Selected Points", expanded=True):
-        st.caption("Rows for the points or lines you selected on the chart.")
-        st.dataframe(selected, use_container_width=True, hide_index=True)
-
-
-def _line(df: pd.DataFrame, y: str, title: str, y_label: str, key: str, color: str = "series"):
-    sub = df.dropna(subset=["concurrency", y])
-    if sub.empty:
-        st.info(f"No {y_label} data for the current filters.")
-        return
-    fig = px.line(
-        sub.sort_values(["concurrency", color]), x="concurrency", y=y, color=color,
-        markers=True, title=title,
-        labels={"concurrency": "Concurrency", y: y_label, color: "Model | version | generator"},
-        custom_data=PLOT_CUSTOM_DATA,
-    )
-    fig.update_layout(legend_title_text="", margin=dict(l=10, r=10, t=50, b=10))
-    event = st.plotly_chart(
-        fig, use_container_width=True, key=key, on_select="rerun",
-        selection_mode=("points", "box", "lasso"),
-    )
-    st.caption("Click points, or box/lasso-select an area, to inspect the source rows.")
-    _show_selected_rows(sub, event)
-
-
-def _bar(df: pd.DataFrame, y: str, title: str, y_label: str, key: str, color: str = "model"):
-    sub = df.dropna(subset=[y])
-    if sub.empty:
-        st.info(f"No {y_label} data for the current filters.")
-        return
-    fig = px.bar(
-        sub, x=color, y=y, color=color, title=title,
-        labels={y: y_label, color: color.replace("_", " ").title()},
-        custom_data=PLOT_CUSTOM_DATA,
-    )
-    fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=50, b=10))
-    event = st.plotly_chart(
-        fig, use_container_width=True, key=key, on_select="rerun",
-        selection_mode=("points", "box", "lasso"),
-    )
-    _show_selected_rows(sub, event)
-
-
 def _overview(df: pd.DataFrame):
     rows, models = len(df), df["model"].nunique()
     col1, col2, col3, col4 = st.columns(4)
@@ -376,73 +337,136 @@ def _overview(df: pd.DataFrame):
     st.dataframe(coverage, use_container_width=True, hide_index=True)
 
 
-def _throughput_tab(df: pd.DataFrame):
-    _line(df, "request_throughput_rps", "Request throughput", "Requests / second", "omni_req_tput")
-    _line(df, "audio_throughput_x", "Audio throughput", "Audio-seconds / wall-second", "omni_audio_tput")
-    _line(df, "output_token_throughput", "Output token throughput", "Tokens / second", "omni_out_tok_tput")
-    _line(df, "total_token_throughput", "Total token throughput", "Tokens / second", "omni_total_tok_tput")
-
-
-def _speech_tab(df: pd.DataFrame):
-    speech = df[df["output_modality"].eq("audio")]
-    if speech.empty:
-        st.info("No speech-output rows for the current filters.")
-        return
-    _line(speech, "audio_rtf_mean", "Mean audio RTF", "RTF (lower is better)", "omni_audio_rtf_mean")
-    _line(speech, "audio_rtf_p95", "P95 audio RTF", "RTF (lower is better)", "omni_audio_rtf_p95")
-    _line(speech, "audio_ttfp_ms_mean", "Mean audio TTFP", "Milliseconds", "omni_audio_ttfp")
-    _line(speech, "audio_underrun_s_mean", "Mean audio underrun", "Seconds", "omni_audio_underrun")
-    sub = speech.dropna(subset=["concurrency", "audio_rtf_p95"])
-    if not sub.empty:
-        fig = px.line(
-            sub.sort_values(["concurrency", "series"]), x="concurrency", y="audio_rtf_p95",
-            color="series", markers=True, title="P95 audio RTF with real-time boundary",
-            labels={"concurrency": "Concurrency", "audio_rtf_p95": "P95 RTF"},
-            custom_data=PLOT_CUSTOM_DATA,
-        )
-        fig.add_hline(y=1.0, line_dash="dash", annotation_text="real-time boundary")
-        fig.update_layout(legend_title_text="", margin=dict(l=10, r=10, t=50, b=10))
-        event = st.plotly_chart(
-            fig, use_container_width=True, key="omni_audio_rtf_boundary",
-            on_select="rerun", selection_mode=("points", "box", "lasso"),
-        )
-        _show_selected_rows(sub, event)
-
-
-def _text_tab(df: pd.DataFrame):
-    text = df[df["output_modality"].eq("text") & df["ttft_ms_median"].notna()]
-    if text.empty:
-        st.info("No text-latency rows for the current filters.")
-        return
-    _line(text, "ttft_ms_median", "Median TTFT", "Milliseconds", "omni_ttft")
-    _line(text, "tpot_ms_median", "Median TPOT", "Milliseconds", "omni_tpot")
-    _line(text, "itl_ms_median", "Median ITL", "Milliseconds", "omni_itl")
-    _line(text, "e2el_ms_median", "Median end-to-end latency", "Milliseconds", "omni_e2el")
-
-
-def _asr_tab(df: pd.DataFrame):
-    asr = df[df["task_type"].eq("asr_transcription") | df["wer"].notna()]
-    if asr.empty:
-        st.info("No ASR rows for the current filters.")
-        return
-    _bar(asr, "wer", "Word error rate", "WER (lower is better)", "omni_wer")
-    _bar(asr, "rtfx", "RTFx", "Audio-seconds / wall-second", "omni_rtfx")
-    _bar(
-        asr, "transcription_throughput_utterances_s", "Transcription throughput",
-        "Utterances / second", "omni_transcription_tput",
+def _performance_plots(df: pd.DataFrame):
+    st.subheader("📊 Performance Plots")
+    st.markdown(
+        "💡 **Tip:** Click on the full screen view (⛶) of the graph to get a detailed view."
     )
 
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        x_label = st.selectbox(
+            "Select X-Axis", list(OMNI_X_AXES), key="omni_perf_x_axis"
+        )
+    with col2:
+        y_label = st.selectbox(
+            "Select Y-Axis", list(OMNI_METRICS), key="omni_perf_y_axis"
+        )
+    x_axis = OMNI_X_AXES[x_label]
+    y_axis = OMNI_METRICS[y_label]
 
-def _performance_plots(df: pd.DataFrame):
-    tabs = st.tabs(["Throughput", "Speech Out", "Text Latency", "ASR Quality"])
-    with tabs[0]:
-        _throughput_tab(df)
-    with tabs[1]:
-        _speech_tab(df)
-    with tabs[2]:
-        _text_tab(df)
-    with tabs[3]:
-        _asr_tab(df)
+    sub = df.dropna(subset=[x_axis, y_axis]).copy()
+    if x_axis == "concurrency":
+        sub["concurrency"] = pd.to_numeric(sub["concurrency"], errors="coerce")
+        sub = sub.dropna(subset=["concurrency"])
+        concurrency_values = sorted(
+            {float(value) for value in sub["concurrency"].dropna()}
+        )
+        if concurrency_values:
+            with col3:
+                if (
+                    "omni_perf_max_concurrency" in st.session_state
+                    and st.session_state["omni_perf_max_concurrency"]
+                    not in concurrency_values
+                ):
+                    st.session_state.pop("omni_perf_max_concurrency")
+                max_conc = st.selectbox(
+                    "Show concurrency up to",
+                    concurrency_values,
+                    index=len(concurrency_values) - 1,
+                    key="omni_perf_max_concurrency",
+                    format_func=lambda value: (
+                        str(int(value)) if float(value).is_integer() else str(value)
+                    ),
+                )
+            sub = sub[sub["concurrency"] <= max_conc]
+    else:
+        with col3:
+            st.caption("Model axis is useful for offline ASR metrics (WER, RTFx).")
+
+    if sub.empty:
+        st.info(f"No data available for '{y_label}' with these filters.")
+        return
+
+    fig = px.line(
+        sub.sort_values([x_axis, "series"]),
+        x=x_axis,
+        y=y_axis,
+        color="series",
+        markers=True,
+        title=f"<b>{y_label} vs {x_label}</b>",
+        labels={x_axis: x_label, y_axis: y_label, "series": "Run"},
+        custom_data=PLOT_CUSTOM_DATA,
+        template="plotly_white_light",
+    )
+    for trace in fig.data:
+        trace.line.width = 2
+        trace.marker.size = 10
+        trace.marker.line = {"width": 1, "color": "white"}
+        trace.hovertemplate = (
+            f"{x_label}: %{{x}}<br>"
+            f"{y_label}: %{{y}}<br>"
+            "Model: %{customdata[0]}<br>"
+            "Version: %{customdata[1]}<br>"
+            "Load generator: %{customdata[2]}<br>"
+            "Concurrency: %{customdata[3]}<extra></extra>"
+        )
+    fig.update_layout(
+        hovermode="closest",
+        legend_title_text="Run Details (Model | Version | Load generator)",
+        height=560,
+        margin={"l": 80, "r": 250, "t": 110, "b": 60},
+        title={"font": {"size": 18}, "x": 0.02, "xanchor": "left", "y": 0.94, "yanchor": "top"},
+    )
+
+    series_options = sorted(sub["series"].unique())
+    if "omni_perf_lines" in st.session_state:
+        st.session_state["omni_perf_lines"] = [
+            line for line in st.session_state["omni_perf_lines"] if line in series_options
+        ]
+    selected_lines = st.multiselect(
+        "Plot lines to compare", series_options, key="omni_perf_lines"
+    )
+
+    def _merge_plot_selection():
+        points = st.session_state["omni_perf_chart"]["selection"]["points"]
+        merged = set(st.session_state.get("omni_perf_lines", []))
+        for point in points or []:
+            custom = point.get("customdata") if isinstance(point, dict) else []
+            if custom and len(custom) >= 3:
+                merged.add(f"{custom[0]} | {custom[1]} | {custom[2]}")
+        st.session_state["omni_perf_lines"] = sorted(merged)
+
+    def _clear_comparison():
+        st.session_state["omni_perf_lines"] = []
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        theme=None,
+        key="omni_perf_chart",
+        on_select=_merge_plot_selection,
+        selection_mode=("points", "box", "lasso"),
+    )
+    st.caption(
+        "Click points, or box/lasso-select an area, to add lines to the comparison. "
+        "You can also choose lines below."
+    )
+
+    st.subheader("📄 Filtered Data for Plot Lines")
+    st.caption("The table shows the source rows for the selected plot lines.")
+    if selected_lines:
+        st.dataframe(
+            sub[sub["series"].isin(selected_lines)],
+            use_container_width=True,
+            hide_index=True,
+        )
+        if st.button(
+            "Clear comparison", key="omni_perf_clear", on_click=_clear_comparison
+        ):
+            pass
+    else:
+        st.caption("No plot lines selected.")
 
 
 def _filtered_data(df: pd.DataFrame):
@@ -468,9 +492,17 @@ def _render_section(section: str, df: pd.DataFrame):
     if section == "🏠 Overview":
         _overview(df)
     elif section == "📊 Performance Plots":
-        _performance_plots(df)
+        filtered = _main_filters(df)
+        if filtered.empty:
+            st.warning("No rows match the current filters.")
+            return
+        _performance_plots(filtered)
     elif section == "📄 Filtered Data":
-        _filtered_data(df)
+        filtered = _main_filters(df)
+        if filtered.empty:
+            st.warning("No rows match the current filters.")
+            return
+        _filtered_data(filtered)
     else:
         _placeholder(section)
 
@@ -478,16 +510,12 @@ def _render_section(section: str, df: pd.DataFrame):
 def render_omni_dashboard(csv_path: str = "datasets/omni/consolidated_dashboard_omni_sample.csv"):
     st.header("vLLM-Omni Performance")
     st.caption(
-        "Speech-in, speech-out, and text benchmarks. Filters follow the RHAIIS "
-        "layout; the sidebar keeps the RHAIIS navigation."
+        "Speech-in, speech-out, and text benchmarks. Overview is the default page; "
+        "Performance Plots uses the RHAIIS filter and chart layout."
     )
     section = _render_sidebar_nav()
     df = load_omni_data(csv_path)
     if df is None or df.empty:
         st.warning("No Omni benchmark data is available.")
         return
-    filtered = _main_filters(df)
-    if filtered.empty:
-        st.warning("No rows match the current filters.")
-        return
-    _render_section(section, filtered)
+    _render_section(section, df)

@@ -20,7 +20,7 @@ Included in the repo:
 
 | File | Purpose |
 |---|---|
-| `datasets/omni/consolidated_dashboard_omni_template.csv` | Header-only 166-column template |
+| `datasets/omni/consolidated_dashboard_omni_template.csv` | Header-only 165-column template |
 | `datasets/omni/consolidated_dashboard_omni_sample.csv` | Sanitized TTS, ASR (HF harness), audio-to-text (GuideLLM), and text example rows |
 | `datasets/omni/consolidated_dashboard_omni_metadata.example.json` | Example defaults for the converter |
 
@@ -107,19 +107,21 @@ Inputs:
 
 The converter prints a JSON summary with row counts, modality/task breakdown, and required-field blanks.
 
-## Dashboard filters
+## Dashboard layout
 
-The Omni view exposes:
+The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is the default page** and shows headline metrics plus a coverage table, with no filter panel.
 
-- Modality
-- Task type
-- Load generator
-- Model
-- Runtime version
-- Accelerator
-- Concurrency
+**Performance Plots**:
 
-Tabs: Overview, Throughput, Speech Out, Text Latency, ASR Quality, Data (with CSV download).
+- RHAIIS-style numbered filters in the main content: Accelerator → Version → Input/Output → Task → Load Generator → Model → TP → Concurrency.
+- `Select X-Axis`: `Concurrency` or `Model`.
+- `Select Y-Axis`: request/audio/token throughput, audio RTF/TTFP/underrun, text TTFT/TPOT/ITL/E2EL, WER, RTFx, or transcription throughput.
+- `Show concurrency up to` ceiling.
+- One Plotly line chart using the RHAIIS `plotly_white_light` template, markers, right-side legend, height 560, and RHAIIS margins.
+- Clicking points, or box/lasso-selecting an area, adds plot lines to the comparison.
+- A **Filtered Data for Plot Lines** section shows the source rows for the selected lines, with a **Clear comparison** button.
+
+**Filtered Data** uses the same numbered filters and adds a CSV download. Other RHAIIS sections remain visible and show a placeholder until they are implemented.
 
 ## Metric notes
 
