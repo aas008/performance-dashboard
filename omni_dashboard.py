@@ -85,6 +85,14 @@ TASK_TYPE_ORDER = [
     "text_to_text",
 ]
 
+TASK_HELP = (
+    "TTS - Voice Clone: clone a reference voice from an audio sample. "
+    "TTS - Default Voice: synthesize with a preset voice. "
+    "TTS - Voice Design: synthesize from a voice description. "
+    "ASR / STT - Transcription: transcribe audio to text. "
+    "Text - Text generation: text-to-text generation."
+)
+
 
 def _task_label(value: str) -> str:
     return TASK_TYPE_LABELS.get(str(value), str(value))
@@ -415,6 +423,7 @@ def _main_filters(df: pd.DataFrame) -> pd.DataFrame:
             task_labels,
             default=task_labels,
             key=task_key,
+            help=TASK_HELP,
         )
     selected_tasks = [
         task for task, label in task_options if label in selected_task_labels
@@ -1358,10 +1367,7 @@ def _compare_versions(df: pd.DataFrame):
             task_labels,
             default=task_labels,
             key=task_key,
-            help=(
-                "TTS has voice clone, default voice, and voice design tasks. "
-                "ASR / STT has a single transcription task."
-            ),
+            help=TASK_HELP,
         )
     if not selected_task_labels:
         st.info("Select at least one task type.")

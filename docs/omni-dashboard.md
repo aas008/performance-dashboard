@@ -161,7 +161,7 @@ The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is 
 
 **Performance Plots**:
 
-- A horizontal RHAIIS-style filter band under a `Filter Your Data` section header: Accelerator → Task → Version → Load Generator + Model → TP. Task labels include modality (`TTS - Voice Clone`, `ASR / STT - Transcription`, `Text - Text generation`), so there is no separate Input/Output filter. Concurrency is not filtered here; charts include every available concurrency value for the selected data.
+- A horizontal RHAIIS-style filter band under a `Filter Your Data` section header: Accelerator → Task → Version → Load Generator + Model → TP. Task labels include modality (`TTS - Voice Clone`, `ASR / STT - Transcription`, `Text - Text generation`), so there is no separate Input/Output filter. A help tooltip explains each task. Concurrency is not filtered here; charts include every available concurrency value for the selected data.
 - `Select X-Axis`: `Concurrency` or `Model`.
 - `Select Y-Axis`: request/audio/token throughput, audio RTF/TTFP/underrun, text TTFT/TPOT/ITL/E2EL, WER, RTFx, or transcription throughput.
 - `Show concurrency up to` ceiling.
