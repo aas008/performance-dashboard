@@ -103,6 +103,16 @@ def test_dummy_stt_fixture():
     offline = [row for row in rows if row["load_generator"] == "offline"]
     assert len(offline) == 2
     assert all(row["wer"] for row in offline)
+    online = [row for row in rows if row["load_generator"] == "guidellm"]
+    assert len(online) == 6
+    for row in online:
+        for column in (
+            "e2el_ms_mean",
+            "e2el_ms_median",
+            "e2el_ms_p95",
+            "e2el_ms_p99",
+        ):
+            assert row[column]
     assert (OMNI_DIR / "logs" / "dummy-stt-35ga-c8.log").exists()
     assert (OMNI_DIR / "logs" / "dummy-stt-36ga-c8.log").exists()
 

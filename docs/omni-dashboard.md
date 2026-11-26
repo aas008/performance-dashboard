@@ -33,7 +33,7 @@ The sample uses only `example/...` models and `demo` metadata. Do not commit pro
 `datasets/omni/consolidated_dashboard_omni_dummy_stt.csv` exercises the ASR/STT path without a real run:
 
 - Model `example/asr-2b`, versions `vllm-omni-3.5-ea2` and `vllm-omni-3.6.0-ga`.
-- GuideLLM online rows at concurrency 1, 8, and 32 with RTFx and transcription throughput.
+- GuideLLM online rows at concurrency 1, 8, and 32 with RTFx, transcription throughput, and E2EL Mean/Median/P95/P99.
 - Offline WER rows for both versions using the HF ASR leaderboard harness.
 - Matching logs under `datasets/omni/logs/` for View Logs.
 

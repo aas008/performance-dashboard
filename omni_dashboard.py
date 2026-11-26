@@ -237,6 +237,7 @@ COMPARE_SUMMARY_FAMILIES = [
     "Audio underrun",
     "TTFT",
     "TPOT",
+    "End-to-end latency",
     "WER",
     "RTFx",
     "Transcription throughput",
@@ -1038,21 +1039,30 @@ def _comparison_table_for_task(
         return "Better" if delta < 0 else "Worse"
 
     merged["verdict"] = merged["delta_pct"].apply(_verdict)
+    concurrency_label = (
+        merged["concurrency_label"].astype(str)
+        if "concurrency_label" in merged.columns
+        else pd.Series("n/a", index=merged.index)
+    )
     merged["label"] = (
         merged["model"].astype(str).str.split("/").str[-1]
         + " | "
         + merged["task_type"].astype(str)
         + " | c="
-        + merged["concurrency_label"].astype(str)
+        + concurrency_label
     )
-    if merged["load_generator"].nunique() > 1:
+    if "load_generator" in merged.columns and merged["load_generator"].nunique() > 1:
         merged["label"] += " | " + merged["load_generator"].astype(str)
-    merged["_concurrency_sort"] = pd.to_numeric(
-        merged["concurrency_label"], errors="coerce"
-    ).fillna(9999)
-    merged = merged.sort_values(
-        ["model", "task_type", "_concurrency_sort", "load_generator"]
-    ).drop(columns=["_concurrency_sort"])
+    if "concurrency_label" in merged.columns:
+        merged["_concurrency_sort"] = pd.to_numeric(
+            merged["concurrency_label"], errors="coerce"
+        ).fillna(9999)
+    else:
+        merged["_concurrency_sort"] = 9999
+    sort_columns = ["model", "task_type", "_concurrency_sort"]
+    if "load_generator" in merged.columns:
+        sort_columns.append("load_generator")
+    merged = merged.sort_values(sort_columns).drop(columns=["_concurrency_sort"])
     return merged
 
 
@@ -1508,7 +1518,9 @@ def _compare_versions(df: pd.DataFrame):
     st.dataframe(summary, use_container_width=True, hide_index=True)
     st.caption(
         "🟢 Better · 🟡 Flat (±1%) · 🔴 Worse. Cells use the geometric mean of "
-        "per-concurrency deltas for the selected statistic. Verdicts account for "
+        "per-concurrency deltas for the selected statistic. Statistic changes apply "
+        "to RTF, TTFP, underrun, TTFT, TPOT, and end-to-end latency; throughput, WER, "
+        "RTFx, and transcription throughput are single values. Verdicts account for "
         "metric direction, so a negative delta is better for lower-is-better metrics."
     )
     st.download_button(

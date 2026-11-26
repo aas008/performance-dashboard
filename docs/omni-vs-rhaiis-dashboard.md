@@ -291,4 +291,13 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 - Removed the Metric selector from the top controls.
 - Removed the selected-metric cards, delta bar chart, and per-concurrency details table.
 - Compare Versions is now a single all-metric summary table plus CSV download, matching the RHAIIS table-first pattern.
-- The Statistic selector still controls Mean / Median / P95 / P99 for the stats-based columns.
+- The Statistic selector still controls Mean / Median / P95 / P99 for the stats-based columns. Single-value metrics (throughput, WER, RTFx, transcription throughput) do not change when the statistic changes.
+- Dummy STT rows include E2EL Mean/Median/P95/P99 with distinct version deltas so the statistic selector is testable for ASR/STT.
+
+## Checkpoint 13 — statistic-aware STT summary
+
+- Added End-to-End Latency to the Compare Versions summary columns.
+- Expanded the dummy STT fixture with E2EL Mean/Median/P95/P99 values. The version deltas differ by statistic (−16% Mean, −18% Median, −12% P95, −10% P99).
+- Single-value metrics (throughput, WER, RTFx, transcription throughput) intentionally stay the same when the statistic changes; the page caption explains this.
+- Fixed the offline/`n/a` concurrency path so offline WER rows render in the summary.
+- Verified in the UI: ASR-only + GuideLLM shows an `E2EL P95` column at P95 and `E2EL Mean` at Mean, with different values.
