@@ -132,6 +132,19 @@ COMPARE_KEYS = [
 ]
 COMPARE_FLAT_THRESHOLD_PCT = 1.0
 
+OMNI_COMPARE_SUMMARY_METRICS = {
+    "Req/s": "Request throughput (req/s)",
+    "Audio tput": "Audio throughput (audio-s/s)",
+    "RTF mean": "Audio RTF mean",
+    "RTF P95": "Audio RTF P95",
+    "TTFP mean": "Audio TTFP mean (ms)",
+    "Underrun": "Audio underrun mean (s)",
+    "TTFT median": "TTFT median (ms)",
+    "TPOT median": "TPOT median (ms)",
+    "WER": "WER",
+    "RTFx": "RTFx",
+}
+
 # Same navigation groups/labels as the RHAIIS shell. Pages that are not yet
 # implemented for Omni render a clear placeholder rather than disappearing.
 OMNI_NAV_GROUPS = [
@@ -740,6 +753,13 @@ def _performance_plots(df: pd.DataFrame):
         st.caption("No plot lines selected.")
 
 
+def _concurrency_sort(value: str) -> tuple:
+    try:
+        return (0, float(value))
+    except (TypeError, ValueError):
+        return (1, str(value))
+
+
 def _natural_key(value: str) -> list:
     return [
         (0, int(part)) if part.isdigit() else (1, part.lower())
@@ -875,29 +895,84 @@ def _comparison_table(
     return merged
 
 
-def _comparison_summary(
+def _aggregate_delta(detail: pd.DataFrame) -> float:
+    deltas = detail["delta_pct"].dropna() / 100.0
+    if deltas.empty:
+        return np.nan
+    factors = 1 + deltas
+    if (factors > 0).all():
+        return (float(np.prod(factors)) ** (1 / len(factors)) - 1) * 100
+    return float(deltas.mean() * 100)
+
+
+def _model_comparison_summary(
     base_df: pd.DataFrame, comparison_df: pd.DataFrame
 ) -> pd.DataFrame:
-    rows = []
-    for label, metric in OMNI_METRICS.items():
+    summary_keys = [
+        key
+        for key in _comparison_keys(base_df, comparison_df)
+        if key != "concurrency_label"
+    ]
+    metric_labels = [
+        (short, label)
+        for short, label in OMNI_COMPARE_SUMMARY_METRICS.items()
+        if base_df[OMNI_METRICS[label]].notna().any()
+        and comparison_df[OMNI_METRICS[label]].notna().any()
+    ]
+    if not metric_labels:
+        return pd.DataFrame()
+
+    groups = {}
+    cells = {}
+    for short, label in metric_labels:
+        metric = OMNI_METRICS[label]
         direction, _ = OMNI_COMPARE_DIRECTIONS.get(metric, ("higher", ".2f"))
         detail = _comparison_table(base_df, comparison_df, metric, direction)
         if detail.empty:
             continue
-        counts = detail["verdict"].value_counts()
-        mean_delta = detail["delta_pct"].mean()
-        rows.append(
-            {
-                "Metric": label,
-                "Direction": "Higher is better" if direction == "higher" else "Lower is better",
-                "Pairs": len(detail),
-                "Better": int(counts.get("Better", 0)),
-                "Worse": int(counts.get("Worse", 0)),
-                "Flat": int(counts.get("Flat", 0)),
-                "Mean delta %": round(float(mean_delta), 2) if pd.notna(mean_delta) else None,
-            }
+        detail["_group"] = (
+            detail[summary_keys].agg(" | ".join, axis=1)
+            if summary_keys
+            else "all"
         )
-    return pd.DataFrame(rows)
+        for group, subset in detail.groupby("_group", sort=False):
+            if group not in groups:
+                meta = subset.iloc[0]
+                groups[group] = {key: meta[key] for key in summary_keys}
+            delta = _aggregate_delta(subset)
+            if pd.isna(delta):
+                cells[(group, short)] = "⚪ N/A"
+            elif abs(delta) < COMPARE_FLAT_THRESHOLD_PCT:
+                cells[(group, short)] = f"🟡 {delta:+.1f}%"
+            elif (direction == "higher" and delta > 0) or (
+                direction == "lower" and delta < 0
+            ):
+                cells[(group, short)] = f"🟢 {delta:+.1f}%"
+            else:
+                cells[(group, short)] = f"🔴 {delta:+.1f}%"
+
+    rows = []
+    for group, meta in groups.items():
+        model = str(meta.get("model", "")).split("/")[-1]
+        tp = str(meta.get("tp", "")).strip()
+        if tp and tp != "n/a":
+            model += f" (TP={tp})"
+        row = {"Model": model}
+        if "task_type" in meta:
+            row["Task"] = meta["task_type"]
+        if "load_generator" in meta:
+            row["Load generator"] = meta["load_generator"]
+        if "accelerator" in meta:
+            row["GPU"] = meta["accelerator"]
+        for short, _ in metric_labels:
+            row[short] = cells.get((group, short), "⚪ N/A")
+        rows.append(row)
+
+    summary = pd.DataFrame(rows)
+    for column in ("Load generator", "GPU"):
+        if column in summary.columns and summary[column].nunique(dropna=False) <= 1:
+            summary = summary.drop(columns=[column])
+    return summary
 
 
 def _default_compare_metric(frame: pd.DataFrame) -> str:
@@ -1020,6 +1095,83 @@ def _compare_versions(df: pd.DataFrame):
             key=metric_key,
         )
 
+    base_concurrency = set(base["concurrency_label"].dropna().astype(str))
+    comparison_concurrency = set(
+        comparison["concurrency_label"].dropna().astype(str)
+    )
+    common_concurrency = sorted(
+        base_concurrency & comparison_concurrency, key=_concurrency_sort
+    )
+    if not common_concurrency:
+        st.warning("No common concurrency levels found for both versions.")
+        return
+    concurrency_key = _selection_key(
+        "omni_compare_concurrency", baseline, candidate, models
+    )
+    if concurrency_key in st.session_state:
+        st.session_state[concurrency_key] = [
+            value
+            for value in st.session_state[concurrency_key]
+            if value in common_concurrency
+        ]
+    selected_concurrency = st.multiselect(
+        "Concurrency levels",
+        common_concurrency,
+        default=common_concurrency,
+        key=concurrency_key,
+        help="Concurrency levels included in the summary, chart, and details.",
+    )
+    if not selected_concurrency:
+        st.warning("Select at least one concurrency level.")
+        return
+    base = base[base["concurrency_label"].astype(str).isin(selected_concurrency)]
+    comparison = comparison[
+        comparison["concurrency_label"].astype(str).isin(selected_concurrency)
+    ]
+
+    context_parts = []
+    for key, label in (
+        ("accelerator", "GPU"),
+        ("task_type", "Task"),
+        ("dataset", "Dataset"),
+    ):
+        if key in base.columns and key in comparison.columns:
+            values = sorted(
+                set(base[key].dropna().astype(str))
+                & set(comparison[key].dropna().astype(str))
+            )
+            values = [
+                value
+                for value in values
+                if value.lower() not in ("", "nan", "none", "n/a")
+            ]
+            if len(values) == 1:
+                context_parts.append(f"{label}: {values[0]}")
+
+    title_col, popover_col = st.columns([5, 1])
+    with title_col:
+        st.markdown(
+            "### "
+            + (" | ".join(context_parts) if context_parts else "Version comparison")
+        )
+    with popover_col:
+        with st.popover("ℹ️ How are these calculated?"):
+            st.markdown(
+                "**Matching:** rows are matched on model, task, concurrency, load "
+                "generator, TP, accelerator, and dataset when both versions provide it.\n\n"
+                "**Delta:** percent change of the comparison version relative to the "
+                "baseline.\n\n"
+                "**Summary:** each cell is the geometric mean of the per-concurrency "
+                "deltas for that model/configuration.\n\n"
+                "**Verdicts:** 🟢 Better, 🟡 Flat (±1%), 🔴 Worse. Verdicts account for "
+                "metric direction: for lower-is-better metrics, a negative delta is better."
+            )
+    st.markdown(f"**Comparing:** {baseline} vs {candidate}")
+    st.caption(
+        "Each version/model/configuration is matched on common concurrency levels. "
+        "Summary cells use the geometric mean of per-concurrency deltas."
+    )
+
     metric = OMNI_METRICS[metric_label]
     direction, _ = OMNI_COMPARE_DIRECTIONS.get(metric, ("higher", ".2f"))
     detail = _comparison_table(base, comparison, metric, direction)
@@ -1029,22 +1181,35 @@ def _compare_versions(df: pd.DataFrame):
         )
         return
 
+    summary = _model_comparison_summary(base, comparison)
+    st.subheader("Version comparison summary")
+    if summary.empty:
+        st.info(
+            "No metric pairs are available for these versions and concurrency levels."
+        )
+    else:
+        st.dataframe(summary, use_container_width=True, hide_index=True)
+        st.caption("🟢 Better · 🟡 Flat (±1%) · 🔴 Worse")
+
     better = int((detail["verdict"] == "Better").sum())
     worse = int((detail["verdict"] == "Worse").sum())
     flat = int((detail["verdict"] == "Flat").sum())
-    mean_delta = detail["delta_pct"].mean()
+    summary_delta = _aggregate_delta(detail)
 
+    st.subheader(f"Selected metric: {metric_label}")
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     metric_col1.metric("Comparisons", len(detail))
     metric_col2.metric("Better", better)
     metric_col3.metric("Worse", worse)
     metric_col4.metric(
-        "Mean delta",
-        f"{mean_delta:+.1f}%" if pd.notna(mean_delta) else "n/a",
+        "Summary delta",
+        f"{summary_delta:+.1f}%" if pd.notna(summary_delta) else "n/a",
     )
     st.caption(
-        f"Flat: {flat}. Delta is the raw percent change; verdict accounts for "
-        "metric direction, so a negative delta is better for lower-is-better metrics."
+        f"Flat: {flat}. The card and summary table use the geometric mean of "
+        "per-concurrency deltas. The chart below shows each concurrency level; "
+        "verdicts account for metric direction, so a negative delta is better "
+        "for lower-is-better metrics."
     )
 
     fig = px.bar(
@@ -1089,12 +1254,7 @@ def _compare_versions(df: pd.DataFrame):
     )
     st.plotly_chart(fig, use_container_width=True, theme=None, key="omni_compare_chart")
 
-    summary = _comparison_summary(base, comparison)
-    if not summary.empty:
-        st.subheader("All metric summary")
-        st.dataframe(summary, use_container_width=True, hide_index=True)
-
-    st.subheader(f"{metric_label} details")
+    st.subheader("Per-concurrency details")
     detail_columns = ["model", "task_type", "concurrency_label"]
     for key in ("dataset", "load_generator", "tp", "accelerator"):
         if key in detail.columns and detail[key].nunique() > 1:

@@ -239,9 +239,17 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 
 ## Checkpoint 8 — Compare Versions implemented
 
-- Added baseline/comparison version selectors with a swap button, a model filter, and a metric selector.
+- Added baseline/comparison version selectors with a swap button, plus model, metric, and concurrency selectors.
+- Added the RHAIIS-style context title (`GPU / Task / Dataset`), **Comparing:** line, and “How are these calculated?” popover.
+- Added a model-level summary table with 🟢 Better / 🟡 Flat / 🔴 Worse cells. Each cell is the geometric mean of per-concurrency deltas; the table is the primary output, like RHAIIS.
 - Version defaults prefer the most recent version as the comparison and the earlier version with the longest common prefix as the baseline (for example, `vllm-omni-3.5-ea2` → `vllm-omni-3.6.0-ga`).
 - Rows are matched on model, task type, concurrency, load generator, TP, and accelerator. Dataset is included when both versions provide it, so legacy rows without a dataset still match.
 - Repeated rows per key are averaged before comparison. Delta is the raw percent change; verdicts account for higher-is-better vs lower-is-better metrics with a 1% flat threshold.
-- Outputs: comparison cards, a `plotly_white_light` delta bar chart, an all-metric summary table, a detailed table, and CSV download.
-- Tested with the real 1.7B Base data: `vllm-omni-3.5-ea2` vs `vllm-omni-3.6.0-ga` produced 4 comparisons across c1/c4/c8/c16, all Better for throughput and RTF. Swapping versions flipped the verdicts to Worse, and switching to a lower-is-better metric flipped the colors/signs correctly.
+- Outputs: model-level summary table, comparison cards, a `plotly_white_light` delta bar chart, a detailed table, and CSV download for the selected metric.
+- Tested with the real data:
+  - `vllm-omni-3.5-ea2` vs `vllm-omni-3.6.0-ga`: 4 comparisons across c1/c4/c8/c16, all Better for throughput and RTF.
+  - Swap: all verdicts flipped to Worse.
+  - Lower-is-better metric: signs and colors flipped correctly.
+  - `vllm-omni-3.5-ea2` vs `vllm-omni-v0.24.0`: 5 models and 25 comparisons rendered in the summary table.
+  - Concurrency subset: removing c1 and c25 reduced the comparison count to 15.
+  - Same-version and one-version datasets show clear warnings.
