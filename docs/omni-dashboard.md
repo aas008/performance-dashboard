@@ -156,7 +156,7 @@ The Omni view uses the same grouped sidebar navigation as RHAIIS. **Overview is 
 2. **Local log directory** — `OMNI_LOG_DIR` (default `datasets/omni/logs`), matched by `run_name`, `mlflow_run_id`, or `deployment_uuid`.
 3. **S3** — `S3_LOGS_BUCKET` + `S3_LOGS_PREFIX` (default `logs/`), keyed by `deployment_uuid`.
 
-The view always shows the full log. Candidates are labeled **Full server log**, **Startup log**, or **Benchmark log**, and the full server log is preferred by default. **Download Full Log** downloads the complete file.
+Omni automatically picks the full server log, falling back to the startup log or benchmark log. The view always shows the complete log, and **Download Full Log** downloads it.
 
 ## Metric notes
 

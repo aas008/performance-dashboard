@@ -232,7 +232,7 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
   1. MLflow artifacts under `MLFLOW_LOG_ARTIFACT_PREFIX` (default `logs`) using `mlflow_run_id`.
   2. Local `.log` files under `OMNI_LOG_DIR` matched by `run_name`, `mlflow_run_id`, or `deployment_uuid`.
   3. S3 `S3_LOGS_PREFIX<deployment_uuid>.log` when `S3_LOGS_BUCKET` is set.
-- Multiple candidates show a log-file selector. The default ranking prefers the run's `saturation_cN.log`, then `*full.log`, then `*startup*.log`.
-- Candidates are labeled **Full server log**, **Startup log**, or **Benchmark log**; the full server log is preferred by default. The view always shows the complete selected log, and **Download Full Log** downloads it.
+- Log resolution is automatic: one run selector and one **Fetch Log** button, with no extra log-file selector. Ranking prefers the full server log, then the startup log, then the benchmark log.
+- The view always shows the complete log, and **Download Full Log** downloads it.
 - Added a sanitized demo log at `datasets/omni/logs/demo-tts-c1.log` so the public sample row works without configuring a log backend.
 - Tested locally with the demo log and with the real 3.6 GA c1 run: the full 6,086,641-character server log rendered end to end, and the demo log loaded completely.

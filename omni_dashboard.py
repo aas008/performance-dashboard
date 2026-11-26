@@ -331,17 +331,6 @@ def _log_run_label(row: pd.Series) -> str:
     return " | ".join(part for part in parts if part and part != "nan")
 
 
-def _log_kind(path: str) -> str:
-    name = Path(path).name.lower()
-    if "full" in name:
-        return "Full server log"
-    if "startup" in name:
-        return "Startup log"
-    if "saturation" in name or "bench" in name or re.search(r"_c\d+(?:\D|$)", name):
-        return "Benchmark log"
-    return "Log"
-
-
 def _log_rank(path: str, concurrency: str) -> tuple:
     name = Path(path).name.lower()
     score = 0
@@ -349,7 +338,7 @@ def _log_rank(path: str, concurrency: str) -> tuple:
         score += 100
     elif "startup" in name:
         score += 80
-    elif "saturation" in name:
+    elif "saturation" in name or "bench" in name or re.search(r"_c\d+(?:\D|$)", name):
         score += 60
     if concurrency not in ("", "nan", "n/a") and f"saturation_c{concurrency}.log" in name:
         score += 10
@@ -387,7 +376,6 @@ def _mlflow_log_candidates(row: pd.Series) -> tuple:
             "source": "mlflow",
             "identifier": run_id,
             "path": path,
-            "label": f"MLflow: {_log_kind(path)} ({path})",
         }
         for path in paths
     ], []
@@ -423,7 +411,6 @@ def _local_log_candidates(row: pd.Series) -> tuple:
             "source": "local",
             "identifier": str(path),
             "path": str(path),
-            "label": f"Local: {_log_kind(path)} ({path.relative_to(root)})",
         }
         for path in matches
     ], []
@@ -439,7 +426,6 @@ def _s3_log_candidates(row: pd.Series) -> tuple:
             "source": "s3",
             "identifier": uuid,
             "path": key,
-            "label": f"S3: {_log_kind(key)} ({key})",
         }
     ], []
 
@@ -522,62 +508,37 @@ def _view_logs(df: pd.DataFrame):
     run_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(selected_run))[:80]
 
     candidates, errors = _log_candidates(row)
-    if errors:
-        with st.expander("Log source warnings", expanded=False):
-            for error in errors:
-                st.caption(error)
-
     if not candidates:
-        st.info(
-            "No log source is configured for this run. Set MLFLOW_TRACKING_URI "
-            "(and credentials), OMNI_LOG_DIR, or S3_LOGS_BUCKET."
-        )
+        st.warning("Log not available for this run.")
+        if errors:
+            st.caption(errors[0])
         return
-
-    candidate_labels = [candidate["label"] for candidate in candidates]
-    if len(candidates) > 1:
-        selected_label = st.selectbox(
-            "Log file", candidate_labels, key=f"omni_log_file_{run_key}"
-        )
-    else:
-        selected_label = candidate_labels[0]
-    selected = next(
-        candidate for candidate in candidates if candidate["label"] == selected_label
-    )
 
     if st.button(
         "🔍 Fetch Log", type="primary", key=f"omni_fetch_log_{run_key}"
     ):
-        st.session_state["omni_log_result"] = {
-            "run": selected_run,
-            "label": selected_label,
-            "content": None,
-            "error": None,
-        }
-        try:
-            content = _fetch_log(
-                selected["source"],
-                selected["identifier"],
-                selected["path"],
-                MLFLOW_TRACKING_URI,
-                S3_LOGS_BUCKET,
-                S3_REGION,
-            )
-            st.session_state["omni_log_result"]["content"] = content
-        except Exception as exc:
-            st.session_state["omni_log_result"]["error"] = str(exc)
+        result = {"run": selected_run, "content": None, "error": None}
+        for candidate in candidates:
+            try:
+                result["content"] = _fetch_log(
+                    candidate["source"],
+                    candidate["identifier"],
+                    candidate["path"],
+                    MLFLOW_TRACKING_URI,
+                    S3_LOGS_BUCKET,
+                    S3_REGION,
+                )
+                break
+            except Exception as exc:
+                result["error"] = str(exc)
+        st.session_state["omni_log_result"] = result
 
     cached = st.session_state.get("omni_log_result")
-    if (
-        not cached
-        or cached.get("run") != selected_run
-        or cached.get("label") != selected_label
-    ):
-        st.caption(f"Source: {selected['label']}")
+    if not cached or cached.get("run") != selected_run:
         return
 
     if cached.get("error"):
-        st.warning(f"Could not load log: {cached['error']}")
+        st.warning(f"Log not available for this run: {cached['error']}")
         return
 
     content = cached.get("content") or ""
