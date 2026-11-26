@@ -473,10 +473,7 @@ def _filtered_data(df: pd.DataFrame):
 
 def _placeholder(section: str):
     st.subheader(section)
-    st.info(
-        "This RHAIIS section is not implemented for Omni yet. "
-        "See docs/omni-vs-rhaiis-dashboard.md and PSAP-3204 for the open scope."
-    )
+    st.info("This section is not implemented for Omni yet.")
 
 
 def _render_section(section: str, df: pd.DataFrame):
