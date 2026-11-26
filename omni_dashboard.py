@@ -224,61 +224,65 @@ def _selection_key(prefix: str, *groups) -> str:
 
 
 def _main_filters(df: pd.DataFrame) -> pd.DataFrame:
-    """RHAIIS-style numbered filter steps in the main content."""
-    filtered = df.copy()
-    with st.expander("Filter Your Data", expanded=True):
-        st.caption(
-            "Same step order as RHAIIS. Model options auto-fill from the selected "
-            "input/output and task."
+    """RHAIIS-style filter band in the main content."""
+    st.subheader("Filter Your Data")
+
+    filter_col1, filter_col2, filter_col3, filter_col4, filter_col5 = st.columns(
+        [1.5, 1.3, 1.5, 2.7, 1]
+    )
+
+    with filter_col1:
+        accelerators = _multiselect(
+            "1️⃣ Select Accelerator(s)", _values(df, "accelerator"), "omni_accelerator"
         )
-        col1, col2 = st.columns(2)
-        with col1:
-            accelerators = _multiselect(
-                "1️⃣ Select Accelerator(s)", _values(df, "accelerator"), "omni_accelerator"
-            )
-        with col2:
-            versions = _multiselect(
-                "2️⃣ Select Version(s)", _values(df, "runtime_version"), "omni_version"
-            )
-        if accelerators:
-            filtered = filtered[filtered["accelerator"].isin(accelerators)]
+    filtered = df
+    if accelerators:
+        filtered = filtered[filtered["accelerator"].isin(accelerators)]
+
+    with filter_col2:
+        io_pairs = _multiselect(
+            "2️⃣ Select Input / Output", _values(filtered, "io_pair"),
+            _selection_key("omni_io", accelerators),
+        )
+    if io_pairs:
+        filtered = filtered[filtered["io_pair"].isin(io_pairs)]
+
+    with filter_col3:
+        versions = _multiselect(
+            "3️⃣ Select Version(s)", _values(filtered, "runtime_version"),
+            _selection_key("omni_version", accelerators, io_pairs),
+        )
         if versions:
             filtered = filtered[filtered["runtime_version"].isin(versions)]
-
-        col3, col4 = st.columns(2)
-        with col3:
-            io_pairs = _multiselect(
-                "3️⃣ Select Input / Output", _values(df, "io_pair"), "omni_io"
-            )
-        if io_pairs:
-            filtered = filtered[filtered["io_pair"].isin(io_pairs)]
-        with col4:
-            tasks = _multiselect(
-                "4️⃣ Select Task Type(s)", _values(filtered, "task_type"),
-                _selection_key("omni_task", io_pairs),
-            )
+        tasks = _multiselect(
+            "4️⃣ Select Task Type(s)", _values(filtered, "task_type"),
+            _selection_key("omni_task", accelerators, io_pairs, versions),
+        )
         if tasks:
             filtered = filtered[filtered["task_type"].isin(tasks)]
 
-        col5, col6 = st.columns(2)
-        with col5:
-            generators = _multiselect(
-                "5️⃣ Select Load Generator(s)", _values(filtered, "load_generator"),
-                _selection_key("omni_generator", io_pairs, tasks),
-            )
+    with filter_col4:
+        generators = _multiselect(
+            "5️⃣ Select Load Generator(s)", _values(filtered, "load_generator"),
+            _selection_key("omni_generator", accelerators, io_pairs, versions, tasks),
+        )
         if generators:
             filtered = filtered[filtered["load_generator"].isin(generators)]
-        with col6:
-            models = _multiselect(
-                "6️⃣ Select Model(s)", _values(filtered, "model"),
-                _selection_key("omni_model", io_pairs, tasks, generators),
-            )
+        models = _multiselect(
+            "6️⃣ Select Model(s)", _values(filtered, "model"),
+            _selection_key(
+                "omni_model", accelerators, io_pairs, versions, tasks, generators
+            ),
+        )
         if models:
             filtered = filtered[filtered["model"].isin(models)]
 
+    with filter_col5:
         tps = _multiselect(
             "7️⃣ Select TP Size(s)", _values(filtered, "tp"),
-            _selection_key("omni_tp", io_pairs, tasks, generators, models),
+            _selection_key(
+                "omni_tp", accelerators, io_pairs, versions, tasks, generators, models
+            ),
         )
         if tps:
             filtered = filtered[filtered["tp"].isin(tps)]

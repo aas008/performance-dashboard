@@ -35,8 +35,8 @@ Status: **draft checkpoint** — no final UX decisions below are implemented exc
 
 **Overview is the default page** and shows headline metrics plus a coverage table, with no filter panel.
 
-**Performance Plots**:
-- RHAIIS-style numbered filters in the main content.
+- **Performance Plots**:
+- Horizontal RHAIIS-style filter band in the main content with RHAIIS column widths (`1.5, 1.3, 1.5, 2.7, 1`).
 - X-axis (`Concurrency` / `Model`), Y-axis metric, and a max-concurrency selector.
 - One Plotly line chart using the RHAIIS `plotly_white_light` template, markers, right-side legend, 560px height, and RHAIIS margins.
 - Clicking points, or box/lasso-selecting an area, adds plot lines to the comparison.
@@ -127,7 +127,7 @@ Auto-fill rule:
 
 1. ~~**Left panel:** keep the RHAIIS navigation in Omni and move filters into main content, or keep filter-only sidebar?~~ **Closed — keep the RHAIIS navigation; filters moved into main content.**
 2. **Pages:** which RHAIIS pages should Omni clone — Overview, Performance Plots, Compare Versions, Performance Trends, Model Comparison, Filtered Data? Which can be left out for now? *Implemented so far: Overview, Performance Plots, Filtered Data.*
-3. **Filter order:** is the proposed order (Accelerator → Version → Input/Output → Task → Load gen → Model → TP) correct, or should Input/Output come first for TTS/ASR users?
+3. **Filter order:** is the proposed order (Accelerator → Input/Output → Version → Task → Load gen → Model → TP) correct?
 4. **Auto-fill semantics:** auto-select all available models, or only narrow the options and let the user choose?
 5. **Modality vs Input/Output:** replace `Modality` with the input→output pair, or keep both?
 6. **TP:** include TP in the Omni UI? Current data is all TP=1.
@@ -216,4 +216,11 @@ Still open: Q2/Q3 (page scope and graph-selection semantics), TP/version labelin
 
 - Removed `8️⃣ Select Concurrency` from the main filter block. All concurrency values for the selected data now flow into Performance Plots.
 - The chart-level `Show concurrency up to` selector remains for limiting the visible range.
-- Filter steps are now Accelerator → Version → Input/Output → Task → Load Generator → Model → TP.
+- Filter steps were Accelerator → Version → Input/Output → Task → Load Generator → Model → TP (reordered in Checkpoint 6).
+
+## Checkpoint 6 — horizontal RHAIIS filter band
+
+- Replaced the `st.expander` filter block and 2-column grid with `st.subheader("Filter Your Data")` and one horizontal row using RHAIIS column widths `[1.5, 1.3, 1.5, 2.7, 1]`.
+- Layout mirrors the RHAIIS screenshot: Accelerator in column 1, Input/Output in column 2, Version + Task in column 3, Load Generator + Model in column 4, TP in column 5.
+- Removed the extra caption so the section starts directly with the RHAIIS-style filter band.
+- Version options now cascade from Accelerator + Input/Output; Task, Load Generator, Model, and TP continue to cascade.
